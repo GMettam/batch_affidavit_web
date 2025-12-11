@@ -1,0 +1,20 @@
+{
+  "name": "batch-affidavit-generator",
+  "version": "2.0.0",
+  "description": "Simple web-based batch affidavit generator - extracts data from GPCs and creates Word documents",
+  "main": "index.html",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "echo 'No build step required'",
+    "deploy": "netlify deploy --prod"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "pizzip": "^3.1.7",
+    "docxtemplater": "^3.49.0",
+    "busboy": "^1.6.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  }
+}
