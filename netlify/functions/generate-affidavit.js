@@ -27,7 +27,8 @@ exports.handler = async (event) => {
     }
 
     // Load the template
-    const templatePath = path.join(__dirname, '..', '..', 'affidavit-template.docx');
+      
+	const templatePath = path.join(__dirname, 'affidavit-template.docx');
     
     if (!fs.existsSync(templatePath)) {
       return {
