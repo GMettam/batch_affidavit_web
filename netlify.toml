@@ -1,8 +1,15 @@
 [build]
-  command = "echo 'No build needed'"
-  publish = "."
   functions = "netlify/functions"
+
+[dev]
+  functions = "netlify/functions"
+  publish = "."
+  port = 8888
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
 [functions]
   node_bundler = "esbuild"
-  included_files = ["affidavit-template.docx"]

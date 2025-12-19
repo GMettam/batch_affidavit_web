@@ -1,11 +1,17 @@
 {
   "name": "batch-affidavit-generator",
-  "version": "2.0.0",
-  "description": "Generate affidavits of service from GPC documents",
+  "version": "1.0.0",
+  "description": "Web-based batch affidavit generator for GPC documents",
+  "main": "index.html",
+  "scripts": {
+    "dev": "netlify dev"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
-    "busboy": "^1.6.0",
-    "docxtemplater": "3.42.3",
+    "docxtemplater": "^3.54.4",
     "pizzip": "^3.1.7"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
   }
 }
