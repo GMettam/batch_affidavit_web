@@ -126,7 +126,6 @@
 
         .file-item:hover {
             background: #F0F0F5;
-            transform: translateX(5px);
         }
 
         .file-info {
@@ -140,9 +139,19 @@
             font-size: 1.5rem;
         }
 
+        .file-details {
+            flex: 1;
+        }
+
         .file-name {
             font-weight: 500;
             color: var(--text-dark);
+            margin-bottom: 5px;
+        }
+
+        .defendant-count {
+            font-size: 0.85rem;
+            color: var(--text-light);
         }
 
         .file-status {
@@ -257,42 +266,6 @@
             transition: width 0.3s ease;
         }
 
-        .service-details-section {
-            margin-top: 30px;
-        }
-
-        .service-form {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .form-label {
-            font-weight: 500;
-            color: var(--text-dark);
-            font-size: 0.95rem;
-        }
-
-        .form-input {
-            padding: 12px;
-            border: 2px solid var(--border);
-            border-radius: 6px;
-            font-size: 1rem;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
         .section-title {
             font-size: 1.5rem;
             font-weight: 600;
@@ -302,10 +275,36 @@
             border-bottom: 3px solid var(--primary);
         }
 
-        .download-link {
-            display: inline-flex;
+        .results-list {
+            margin-top: 20px;
+        }
+
+        .result-item {
+            display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: space-between;
+            padding: 15px 20px;
+            background: var(--bg-light);
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .result-info {
+            flex: 1;
+        }
+
+        .result-case {
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 5px;
+        }
+
+        .result-defendant {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+
+        .download-button {
             padding: 10px 20px;
             background: var(--primary);
             color: white;
@@ -313,9 +312,12 @@
             border-radius: 6px;
             font-weight: 500;
             transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .download-link:hover {
+        .download-button:hover {
             background: var(--primary-dark);
             transform: translateY(-2px);
         }
@@ -324,13 +326,44 @@
             display: none;
         }
 
-        .error-message {
+        .info-box {
+            background: #E3F2FD;
+            border-left: 4px solid #2196F3;
             padding: 15px;
-            background: #FFEBEE;
-            border-left: 4px solid var(--error);
             border-radius: 6px;
-            color: var(--error);
-            margin-top: 15px;
+            margin: 20px 0;
+        }
+
+        .info-box p {
+            margin: 0;
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .stat-box {
+            background: var(--bg-light);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            margin-top: 5px;
         }
 
         @media (max-width: 768px) {
@@ -345,10 +378,6 @@
             .upload-zone {
                 padding: 40px 20px;
             }
-
-            .service-form {
-                grid-template-columns: 1fr;
-            }
         }
     </style>
 </head>
@@ -356,17 +385,21 @@
     <div class="container">
         <header>
             <h1>Batch Affidavit Generator</h1>
-            <p class="subtitle">Upload GPC documents to generate affidavits of service</p>
+            <p class="subtitle">Upload GPC documents to generate blank affidavits of service</p>
         </header>
 
         <!-- Step 1: Upload Files -->
         <div class="card" id="upload-section">
             <h2 class="section-title">Step 1: Upload GPC Documents</h2>
             
+            <div class="info-box">
+                <p><strong>New simplified workflow:</strong> Upload your GPCs and the system will generate blank affidavits for all defendants. You can then fill in the service details directly in the Word documents after serving.</p>
+            </div>
+            
             <div class="upload-zone" id="upload-zone">
                 <div class="upload-icon">📄</div>
                 <div class="upload-text">Drop PDF files here or click to browse</div>
-                <div class="upload-subtext">Support for multiple files</div>
+                <div class="upload-subtext">Support for multiple files - all defendants will be extracted</div>
             </div>
             
             <input type="file" id="file-input" class="file-input" multiple accept=".pdf">
@@ -385,31 +418,23 @@
 
             <div class="button-group">
                 <button class="button button-primary" id="process-button" disabled>
-                    <span>Process Documents</span>
+                    <span>Process & Generate Affidavits</span>
                     <span>→</span>
                 </button>
             </div>
         </div>
 
-        <!-- Step 2: Add Service Details -->
-        <div class="card hidden" id="service-section">
-            <h2 class="section-title">Step 2: Add Service Details</h2>
-            
-            <div id="service-forms-container"></div>
-
-            <div class="button-group">
-                <button class="button button-primary" id="generate-button">
-                    <span>Generate Affidavits</span>
-                    <span>→</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- Step 3: Download Results -->
+        <!-- Step 2: Download Results -->
         <div class="card hidden" id="results-section">
-            <h2 class="section-title">Step 3: Download Affidavits</h2>
+            <h2 class="section-title">Step 2: Download Your Affidavits</h2>
             
-            <div id="results-container"></div>
+            <div class="summary-stats" id="summary-stats"></div>
+            
+            <div class="info-box">
+                <p><strong>Next steps:</strong> Download all affidavits below. The service details fields (Date, Time, Place) are blank - fill them in manually in Word after you've served each defendant.</p>
+            </div>
+            
+            <div class="results-list" id="results-list"></div>
 
             <div class="button-group">
                 <button class="button button-primary" onclick="location.reload()">
@@ -427,8 +452,8 @@
         // State management
         const state = {
             files: [],
-            extractedData: [],
-            serviceDetails: []
+            extractedData: [], // Array of { filename, caseNumber, claimant, defendants: [{name, address}] }
+            allDefendants: [] // Flattened list of all defendants with their case info
         };
 
         // DOM elements
@@ -440,11 +465,9 @@
         const progressFill = document.getElementById('progress-fill');
         const progressText = document.getElementById('progress-text');
         const uploadSection = document.getElementById('upload-section');
-        const serviceSection = document.getElementById('service-section');
         const resultsSection = document.getElementById('results-section');
-        const serviceFormsContainer = document.getElementById('service-forms-container');
-        const resultsContainer = document.getElementById('results-container');
-        const generateButton = document.getElementById('generate-button');
+        const summaryStats = document.getElementById('summary-stats');
+        const resultsList = document.getElementById('results-list');
 
         // Upload zone interactions
         uploadZone.addEventListener('click', () => fileInput.click());
@@ -492,7 +515,10 @@
                 fileItem.innerHTML = `
                     <div class="file-info">
                         <span class="file-icon">📄</span>
-                        <span class="file-name">${file.name}</span>
+                        <div class="file-details">
+                            <div class="file-name">${file.name}</div>
+                            <div class="defendant-count" id="defendant-count-${index}">Processing...</div>
+                        </div>
                     </div>
                     <div class="file-status">
                         <span class="status-badge status-pending">Pending</span>
@@ -510,20 +536,41 @@
             
             await processAllFiles();
             
-            // Move to service details section
-            serviceSection.classList.remove('hidden');
-            createServiceForms();
-            serviceSection.scrollIntoView({ behavior: 'smooth' });
+            // Show results section
+            displayResults();
+            resultsSection.classList.remove('hidden');
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
         });
 
         // Process all files
         async function processAllFiles() {
+            state.extractedData = [];
+            state.allDefendants = [];
+            
             for (let i = 0; i < state.files.length; i++) {
                 updateFileStatus(i, 'processing');
                 
                 try {
                     const data = await extractDataFromPDF(state.files[i]);
                     state.extractedData.push(data);
+                    
+                    // Update defendant count
+                    const countEl = document.getElementById(`defendant-count-${i}`);
+                    if (countEl) {
+                        countEl.textContent = `${data.defendants.length} defendant${data.defendants.length > 1 ? 's' : ''} found`;
+                    }
+                    
+                    // Flatten defendants for easier processing
+                    data.defendants.forEach(defendant => {
+                        state.allDefendants.push({
+                            filename: data.filename,
+                            caseNumber: data.caseNumber,
+                            claimant: data.claimant,
+                            defendantName: defendant.name,
+                            defendantAddress: defendant.address
+                        });
+                    });
+                    
                     updateFileStatus(i, 'complete');
                 } catch (error) {
                     console.error('Error processing file:', error);
@@ -567,9 +614,9 @@
             const statusEl = fileItem.querySelector('.file-status');
             
             const statusMap = {
-                processing: { class: 'status-processing', html: '<div class="spinner"></div><span class="status-badge status-processing">Processing...</span>' },
-                complete: { class: 'status-complete', html: '<span class="status-badge status-complete">✓ Complete</span>' },
-                error: { class: 'status-error', html: '<span class="status-badge status-error">⚠ Error</span>' }
+                processing: { html: '<div class="spinner"></div><span class="status-badge status-processing">Processing...</span>' },
+                complete: { html: '<span class="status-badge status-complete">✓ Complete</span>' },
+                error: { html: '<span class="status-badge status-error">⚠ Error</span>' }
             };
             
             statusEl.innerHTML = statusMap[status].html;
@@ -581,131 +628,69 @@
             progressText.textContent = `${Math.round(percent)}%`;
         }
 
-        // Create service detail forms
-        function createServiceForms() {
-            serviceFormsContainer.innerHTML = '';
+        // Display results and generate all affidavits
+        async function displayResults() {
+            // Show summary stats
+            const totalGPCs = state.files.length;
+            const totalDefendants = state.allDefendants.length;
             
-            state.extractedData.forEach((data, index) => {
-                const formHtml = `
-                    <div class="service-details-section">
-                        <h3>${data.caseNumber} - ${data.defendant}</h3>
-                        <div class="service-form">
-                            <div class="form-group">
-                                <label class="form-label">Date of Service</label>
-                                <input type="date" class="form-input" data-index="${index}" data-field="serviceDate" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Time of Service</label>
-                                <input type="time" class="form-input" data-index="${index}" data-field="serviceTime" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Place of Service</label>
-                                <input type="text" class="form-input" data-index="${index}" data-field="servicePlace" placeholder="Full address" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Method of Service</label>
-                                <select class="form-input" data-index="${index}" data-field="serviceMethod" required>
-                                    <option value="">Select method...</option>
-                                    <option value="Personal service">Personal service</option>
-                                    <option value="Substituted service">Substituted service</option>
-                                    <option value="Left with adult">Left with adult</option>
-                                </select>
-                            </div>
+            summaryStats.innerHTML = `
+                <div class="stat-box">
+                    <div class="stat-number">${totalGPCs}</div>
+                    <div class="stat-label">GPCs Processed</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">${totalDefendants}</div>
+                    <div class="stat-label">Affidavits Generated</div>
+                </div>
+            `;
+            
+            // Generate and display all affidavits
+            resultsList.innerHTML = '<p style="text-align: center; color: var(--text-light);">Generating affidavits...</p>';
+            
+            for (let i = 0; i < state.allDefendants.length; i++) {
+                const defendant = state.allDefendants[i];
+                
+                try {
+                    const blob = await generateAffidavit(defendant);
+                    const url = URL.createObjectURL(blob);
+                    
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'result-item';
+                    resultItem.innerHTML = `
+                        <div class="result-info">
+                            <div class="result-case">${defendant.caseNumber}</div>
+                            <div class="result-defendant">${defendant.defendantName}</div>
                         </div>
-                    </div>
-                `;
-                serviceFormsContainer.insertAdjacentHTML('beforeend', formHtml);
-            });
-
-            // Add event listeners to save form data
-            document.querySelectorAll('.service-form .form-input').forEach(input => {
-                input.addEventListener('change', (e) => {
-                    const index = parseInt(e.target.dataset.index);
-                    const field = e.target.dataset.field;
+                        <a href="${url}" download="Affidavit_${defendant.caseNumber.replace(/\//g, '-')}_${defendant.defendantName.replace(/[^a-zA-Z0-9]/g, '_')}.docx" class="download-button">
+                            <span>Download</span>
+                            <span>⬇</span>
+                        </a>
+                    `;
                     
-                    if (!state.serviceDetails[index]) {
-                        state.serviceDetails[index] = {};
+                    if (i === 0) {
+                        resultsList.innerHTML = '';
                     }
-                    
-                    state.serviceDetails[index][field] = e.target.value;
-                });
-            });
+                    resultsList.appendChild(resultItem);
+                } catch (error) {
+                    console.error('Error generating affidavit for', defendant.defendantName, error);
+                }
+            }
         }
 
-        // Generate affidavits
-        generateButton.addEventListener('click', async () => {
-            // Validate all forms are filled
-            const allInputs = document.querySelectorAll('.service-form .form-input');
-            let allValid = true;
-            
-            allInputs.forEach(input => {
-                if (!input.value) {
-                    allValid = false;
-                    input.style.borderColor = 'var(--error)';
-                } else {
-                    input.style.borderColor = 'var(--border)';
-                }
+        // Generate single affidavit
+        async function generateAffidavit(defendant) {
+            const response = await fetch('/.netlify/functions/generate-affidavit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(defendant)
             });
 
-            if (!allValid) {
-                alert('Please fill in all service details');
-                return;
+            if (!response.ok) {
+                throw new Error(`Failed to generate affidavit for ${defendant.defendantName}`);
             }
 
-            generateButton.disabled = true;
-            generateButton.innerHTML = '<div class="spinner"></div><span>Generating...</span>';
-
-            try {
-                await generateAllAffidavits();
-                
-                // Show results section
-                resultsSection.classList.remove('hidden');
-                resultsSection.scrollIntoView({ behavior: 'smooth' });
-            } catch (error) {
-                console.error('Error generating affidavits:', error);
-                alert('Error generating affidavits. Please try again.');
-                generateButton.disabled = false;
-                generateButton.innerHTML = '<span>Generate Affidavits</span><span>→</span>';
-            }
-        });
-
-        // Generate all affidavits
-        async function generateAllAffidavits() {
-            resultsContainer.innerHTML = '';
-            
-            for (let i = 0; i < state.extractedData.length; i++) {
-                const data = {
-                    ...state.extractedData[i],
-                    ...state.serviceDetails[i]
-                };
-
-                const response = await fetch('/.netlify/functions/generate-affidavit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Failed to generate affidavit for ${data.defendant}`);
-                }
-
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                
-                const resultItem = document.createElement('div');
-                resultItem.className = 'file-item';
-                resultItem.innerHTML = `
-                    <div class="file-info">
-                        <span class="file-icon">📄</span>
-                        <span class="file-name">${data.caseNumber} - ${data.defendant}</span>
-                    </div>
-                    <a href="${url}" download="Affidavit_${data.caseNumber}_${data.defendant.replace(/[^a-zA-Z0-9]/g, '_')}.docx" class="download-link">
-                        <span>Download</span>
-                        <span>⬇</span>
-                    </a>
-                `;
-                resultsContainer.appendChild(resultItem);
-            }
+            return await response.blob();
         }
     </script>
 </body>
