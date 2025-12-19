@@ -16,8 +16,7 @@ export const handler = async (event) => {
     const data = JSON.parse(event.body);
     
     // Validate required fields
-    const required = ['caseNumber', 'claimant', 'defendant', 'defendantAddress', 
-                     'serviceDate', 'serviceTime', 'servicePlace', 'serviceMethod'];
+    const required = ['caseNumber', 'claimant', 'defendantName', 'defendantAddress'];
     
     for (const field of required) {
       if (!data[field]) {
@@ -45,22 +44,15 @@ export const handler = async (event) => {
       }
     });
 
-    // Format the date
-    const formattedDate = new Date(data.serviceDate).toLocaleDateString('en-AU', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-
-    // Prepare the data for template
+    // Prepare the data for template - BLANK service details
     const templateData = {
       'Case number': data.caseNumber,
       'Claimant': data.claimant,
-      'Defendant': data.defendant,
-      'Name': data.defendant, // The defendant name field
-      'Date': formattedDate,
-      'time am/pm': data.serviceTime,
-      'Place': data.servicePlace,
+      'Defendant': data.defendantName,
+      'Name': data.defendantName, // The defendant name field
+      'Date': '', // BLANK - to be filled in manually
+      'time am/pm': '', // BLANK - to be filled in manually
+      'Place': '', // BLANK - to be filled in manually
       'Name of process': 'General Procedure Claim'
     };
 
@@ -73,12 +65,16 @@ export const handler = async (event) => {
       compression: 'DEFLATE'
     });
 
+    // Create a safe filename
+    const safeDefendantName = data.defendantName.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Affidavit_${data.caseNumber.replace(/\//g, '-')}_${safeDefendantName}.docx`;
+
     // Return the document
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="Affidavit_${data.caseNumber}_${data.defendant.replace(/[^a-zA-Z0-9]/g, '_')}.docx"`
+        'Content-Disposition': `attachment; filename="${filename}"`
       },
       body: buf.toString('base64'),
       isBase64Encoded: true
