@@ -15,7 +15,7 @@ export const handler = async (event) => {
   try {
     const data = JSON.parse(event.body);
     
-    // Validate required fields
+    // Validate required fields - NO SERVICE DETAILS REQUIRED
     const required = ['caseNumber', 'claimant', 'defendantName', 'defendantAddress'];
     
     for (const field of required) {
@@ -49,10 +49,10 @@ export const handler = async (event) => {
       'Case number': data.caseNumber,
       'Claimant': data.claimant,
       'Defendant': data.defendantName,
-      'Name': data.defendantName, // The defendant name field
-      'Date': '', // BLANK - to be filled in manually
-      'time am/pm': '', // BLANK - to be filled in manually
-      'Place': '', // BLANK - to be filled in manually
+      'Name': data.defendantName,
+      'Date': '',
+      'time am/pm': '',
+      'Place': '',
       'Name of process': 'General Procedure Claim'
     };
 
@@ -67,7 +67,8 @@ export const handler = async (event) => {
 
     // Create a safe filename
     const safeDefendantName = data.defendantName.replace(/[^a-zA-Z0-9]/g, '_');
-    const filename = `Affidavit_${data.caseNumber.replace(/\//g, '-')}_${safeDefendantName}.docx`;
+    const safeCaseNumber = data.caseNumber.replace(/\//g, '-');
+    const filename = `Affidavit_${safeCaseNumber}_${safeDefendantName}.docx`;
 
     // Return the document
     return {
