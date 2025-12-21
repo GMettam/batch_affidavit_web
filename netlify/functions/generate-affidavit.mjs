@@ -16,7 +16,7 @@ export const handler = async (event) => {
     const data = JSON.parse(event.body);
     
     // Validate required fields
-    const required = ['caseNumber', 'claimant', 'defendants', 'defendantName'];
+    const required = ['caseNumber', 'claimant', 'defendantName', 'defendantAddress'];
     
     for (const field of required) {
       if (!data[field]) {
@@ -25,14 +25,6 @@ export const handler = async (event) => {
           body: JSON.stringify({ error: `Missing required field: ${field}` })
         };
       }
-    }
-
-    // Validate defendants is an array
-    if (!Array.isArray(data.defendants) || data.defendants.length === 0) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'defendants must be a non-empty array' })
-      };
     }
 
     // Load the template
@@ -63,26 +55,29 @@ export const handler = async (event) => {
       'Name of process': 'General Procedure Claim'
     };
 
-    // Add up to 6 defendants
-    // Fill in the defendants we have, leave the rest blank
-    for (let i = 0; i < 6; i++) {
-      const defNum = i + 1;
-      if (i < data.defendants.length) {
-        // We have a defendant for this slot
-        templateData[`Defendant${defNum}`] = data.defendants[i].name;
-      } else {
-        // No defendant for this slot - leave blank
-        templateData[`Defendant${defNum}`] = '';
+    // Fill in all defendants (up to 6)
+    // data.allDefendants is an array of all defendant names
+    if (data.allDefendants && Array.isArray(data.allDefendants)) {
+      for (let i = 0; i < 6; i++) {
+        const defNum = i + 1;
+        if (i < data.allDefendants.length) {
+          templateData[`Defendant${defNum}`] = data.allDefendants[i];
+        } else {
+          templateData[`Defendant${defNum}`] = '';
+        }
       }
     }
-
-    // Also handle the old [Defendant, First Defendant, etc.] field if it exists
-    templateData['Defendant, First Defendant, etc.'] = data.defendantName;
     
     // Determine which defendant this is (First, Second, etc.)
-    const defendantIndex = data.defendants.findIndex(d => d.name === data.defendantName);
-    const defendantOrdinal = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth'][defendantIndex] || 'First';
-    templateData['Defendant'] = `${defendantOrdinal} Defendant`;
+    let defendantOrdinal = 'Defendant';
+    if (data.allDefendants && Array.isArray(data.allDefendants)) {
+      const defendantIndex = data.allDefendants.findIndex(d => d === data.defendantName);
+      if (defendantIndex >= 0) {
+        const ordinals = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth'];
+        defendantOrdinal = `${ordinals[defendantIndex]} Defendant`;
+      }
+    }
+    templateData['Defendant'] = defendantOrdinal;
 
     // Render the document
     doc.render(templateData);
