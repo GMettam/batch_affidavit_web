@@ -1,8 +1,7 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { join } from 'path';
-import { spawn } from 'child_process';
 
 export const handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -63,71 +62,43 @@ export const handler = async (event) => {
     // Render the document
     doc.render(templateData);
     
-    // Save to temporary file
-    const tempPath = '/tmp/temp_affidavit.docx';
-    const buf = doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' });
-    writeFileSync(tempPath, buf);
+    // Get the rendered zip
+    const renderedZip = doc.getZip();
     
-    // Use Python to remove empty defendant tables
+    // Remove empty defendant tables using XML manipulation
     const defendantCount = data.allDefendants.length;
-    const cleanedPath = '/tmp/cleaned_affidavit.docx';
     
-    const pythonScript = `
-from docx import Document
-
-doc = Document('${tempPath}')
-defendant_count = ${defendantCount}
-
-# Identify tables to remove (empty defendants)
-tables_to_remove = []
-
-for idx in range(len(doc.tables)):
-    table = doc.tables[idx]
-    if len(table.rows) > 0:
-        label = table.rows[0].cells[0].text.strip()
+    if (defendantCount < 6) {
+      // Get the document XML
+      let documentXml = renderedZip.file('word/document.xml').asText();
+      
+      // Remove tables for defendants we don't need
+      const defendantsToRemove = [];
+      if (defendantCount < 3) defendantsToRemove.push('Third Defendant');
+      if (defendantCount < 4) defendantsToRemove.push('Fourth Defendant');
+      if (defendantCount < 5) defendantsToRemove.push('Fifth Defendant');
+      if (defendantCount < 6) defendantsToRemove.push('Sixth Defendant');
+      
+      for (const defendantLabel of defendantsToRemove) {
+        // Find and remove the table containing this defendant label
+        // Pattern: <w:tbl>...defendantLabel...</w:tbl> followed by optional spacing paragraph
+        const tablePattern = new RegExp(
+          `<w:tbl>([\\s\\S]*?)<w:t>${defendantLabel}</w:t>([\\s\\S]*?)</w:tbl>(?:\\s*<w:p[^>]*>\\s*<w:pPr/>\\s*</w:p>)?`,
+          'g'
+        );
         
-        # Check if this is an empty defendant table
-        if 'Third Defendant' in label and defendant_count < 3:
-            tables_to_remove.append(table._element)
-        elif 'Fourth Defendant' in label and defendant_count < 4:
-            tables_to_remove.append(table._element)
-        elif 'Fifth Defendant' in label and defendant_count < 5:
-            tables_to_remove.append(table._element)
-        elif 'Sixth Defendant' in label and defendant_count < 6:
-            tables_to_remove.append(table._element)
-
-# Remove tables and their spacing paragraphs
-for tbl_elem in tables_to_remove:
-    parent = tbl_elem.getparent()
-    # Also remove the paragraph after the table (spacing)
-    tbl_pos = list(parent).index(tbl_elem)
-    if tbl_pos + 1 < len(parent):
-        next_elem = parent[tbl_pos + 1]
-        if next_elem.tag.endswith('}p'):
-            parent.remove(next_elem)
-    parent.remove(tbl_elem)
-
-doc.save('${cleanedPath}')
-`;
-
-    // Execute Python script to clean document
-    await new Promise((resolve, reject) => {
-      const python = spawn('python3', ['-c', pythonScript]);
-      let stderr = '';
+        documentXml = documentXml.replace(tablePattern, '');
+      }
       
-      python.stderr.on('data', (data) => { stderr += data.toString(); });
-      
-      python.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`Python cleanup failed: ${stderr}`));
-        }
-      });
-    });
+      // Update the XML in the zip
+      renderedZip.file('word/document.xml', documentXml);
+    }
     
-    // Read the cleaned document
-    const finalBuf = readFileSync(cleanedPath);
+    // Generate the final buffer
+    const buf = renderedZip.generate({
+      type: 'nodebuffer',
+      compression: 'DEFLATE'
+    });
 
     // Create filename
     const safeDefendantName = data.defendantName.replace(/[^a-zA-Z0-9]/g, '_');
@@ -140,7 +111,7 @@ doc.save('${cleanedPath}')
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'Content-Disposition': `attachment; filename="${filename}"`
       },
-      body: finalBuf.toString('base64'),
+      body: buf.toString('base64'),
       isBase64Encoded: true
     };
 
