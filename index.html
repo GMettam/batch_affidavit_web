@@ -561,13 +561,17 @@
                     }
                     
                     // Flatten defendants for easier processing
+                    // Extract just the names for the allDefendants array
+                    const defendantNames = data.defendants.map(d => d.name);
+                    
                     data.defendants.forEach(defendant => {
                         state.allDefendants.push({
                             filename: data.filename,
                             caseNumber: data.caseNumber,
                             claimant: data.claimant,
                             defendantName: defendant.name,
-                            defendantAddress: defendant.address
+                            defendantAddress: defendant.address,
+                            allDefendants: defendantNames // Add all defendant names for this case
                         });
                     });
                     
