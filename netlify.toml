@@ -4,6 +4,8 @@
 
 [functions]
   node_bundler = "esbuild"
+  # Include the Word template in function bundles
+  included_files = ["netlify/functions/*.docx"]
 
 [[redirects]]
   from = "/*"
