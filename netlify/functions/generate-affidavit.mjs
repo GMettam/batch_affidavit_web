@@ -1,11 +1,6 @@
 import PizZip from 'pizzip';
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-
-// Get the directory of this module
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { join } from 'path';
 
 export const handler = async (event) => {
   console.log('Function invoked');
@@ -33,19 +28,26 @@ export const handler = async (event) => {
       }
     }
 
-    // Try multiple possible locations for the template
-    let templatePath;
+    // In Netlify, the template should be bundled with the function
+    // Try multiple possible paths
+    const templateFilename = 'Form_11_-_Affidavit_of_Service.docx';
     let content;
+    let foundPath = null;
     
+    // Possible paths where the template might be
     const possiblePaths = [
-      join(process.cwd(), 'Form_11_-_Affidavit_of_Service.docx'),
-      join(__dirname, 'Form_11_-_Affidavit_of_Service.docx'),
-      join(__dirname, '..', '..', 'Form_11_-_Affidavit_of_Service.docx'),
-      '/var/task/Form_11_-_Affidavit_of_Service.docx'
+      // Same directory as the function (most likely after bundling)
+      `./${templateFilename}`,
+      // In the function directory
+      `./netlify/functions/${templateFilename}`,
+      // At the root
+      `./${templateFilename}`,
+      // Absolute path
+      `/var/task/${templateFilename}`,
+      `/var/task/netlify/functions/${templateFilename}`
     ];
     
     console.log('Trying to load template from possible paths:');
-    let foundPath = null;
     
     for (const path of possiblePaths) {
       try {
@@ -55,14 +57,22 @@ export const handler = async (event) => {
         console.log(`  ✓ Found template at: ${path}`);
         break;
       } catch (err) {
-        console.log(`  ✗ Not found at: ${path}`);
+        console.log(`  ✗ Not found: ${err.message}`);
       }
     }
     
     if (!foundPath) {
       console.error('Template file not found in any location');
       console.error('Current working directory:', process.cwd());
-      console.error('__dirname:', __dirname);
+      
+      // Try to list what files are available
+      try {
+        const fs = await import('fs');
+        const files = fs.readdirSync('.');
+        console.log('Files in current directory:', files);
+      } catch (e) {
+        console.log('Could not list directory');
+      }
       
       return {
         statusCode: 500,
@@ -72,12 +82,14 @@ export const handler = async (event) => {
         },
         body: JSON.stringify({ 
           error: 'Template file not found',
-          details: 'Form_11_-_Affidavit_of_Service.docx is not available',
-          searchedPaths: possiblePaths
+          details: 'Form_11_-_Affidavit_of_Service.docx is not available in the function bundle',
+          searchedPaths: possiblePaths,
+          cwd: process.cwd()
         })
       };
     }
     
+    console.log('Creating PizZip from template');
     const zip = new PizZip(content);
     
     // Get the main document XML
