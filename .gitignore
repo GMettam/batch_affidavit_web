@@ -1,29 +1,5 @@
-# Dependencies
 node_modules/
-package-lock.json
-
-# Build outputs
-dist/
 .netlify/
-
-# Environment variables
-.env
-.env.local
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Logs
 *.log
-npm-debug.log*
-
-# Temporary files
-*.tmp
-temp/
+.env
+.DS_Store

@@ -1,16 +1,11 @@
 [build]
   functions = "netlify/functions"
-
-[dev]
-  functions = "netlify/functions"
   publish = "."
-  port = 8888
+
+[functions]
+  node_bundler = "esbuild"
 
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-[functions]
-  node_bundler = "esbuild"
-  included_files = ["netlify/functions/*.docx"]

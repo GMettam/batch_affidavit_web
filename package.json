@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Web-based batch affidavit generator for GPC documents",
   "main": "index.html",
+  "type": "module",
   "scripts": {
     "dev": "netlify dev"
   },
