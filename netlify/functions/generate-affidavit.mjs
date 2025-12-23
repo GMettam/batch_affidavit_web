@@ -1,6 +1,4 @@
-import PizZip from 'pizzip';
-import Docxtemplater from 'docxtemplater';
-import { readFileSync } from 'fs';
+import { spawn } from 'child_process';
 import { join } from 'path';
 
 export const handler = async (event) => {
@@ -25,80 +23,43 @@ export const handler = async (event) => {
       }
     }
 
-    // Load the template
-    const templatePath = join(process.cwd(), 'netlify', 'functions', 'Form_11_-_Affidavit_of_Service.docx');
-    const content = readFileSync(templatePath, 'binary');
-    const zip = new PizZip(content);
+    // Call Python script
+    const pythonScript = join(process.cwd(), 'netlify', 'functions', 'generate_affidavit.py');
     
-    // Create docxtemplater instance
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks: true,
-      delimiters: { start: '[', end: ']' }
+    const result = await new Promise((resolve, reject) => {
+      const python = spawn('python3', [pythonScript]);
+      
+      let stdout = '';
+      let stderr = '';
+      
+      // Send data to Python script via stdin
+      python.stdin.write(JSON.stringify(data));
+      python.stdin.end();
+      
+      python.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      python.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      python.on('close', (code) => {
+        if (code === 0) {
+          try {
+            resolve(JSON.parse(stdout));
+          } catch (e) {
+            reject(new Error(`Failed to parse Python output: ${stdout}`));
+          }
+        } else {
+          reject(new Error(`Python script failed: ${stderr}`));
+        }
+      });
     });
 
-    // Prepare template data
-    const templateData = {
-      'Case number': data.caseNumber || '',
-      'Claimant': data.claimant || '',
-      'Name': data.defendantName || '',
-      'Date': '',
-      'time am/pm': '',
-      'Place': '',
-      'Name of process': 'General Procedure Claim'
-    };
-
-    // Fill defendant slots (all 6)
-    for (let i = 0; i < 6; i++) {
-      const defNum = i + 1;
-      templateData[`Defendant${defNum}`] = (i < data.allDefendants.length) ? data.allDefendants[i] : '';
+    if (!result.success) {
+      throw new Error(result.error);
     }
-    
-    // Determine ordinal (First, Second, etc.)
-    const defendantIndex = data.allDefendants.findIndex(d => d === data.defendantName);
-    const ordinals = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth'];
-    templateData['Defendant'] = (defendantIndex >= 0) ? `${ordinals[defendantIndex]} Defendant` : 'Defendant';
-
-    // Render the document
-    doc.render(templateData);
-    
-    // Get the rendered zip
-    const renderedZip = doc.getZip();
-    
-    // Remove empty defendant tables using XML manipulation
-    const defendantCount = data.allDefendants.length;
-    
-    if (defendantCount < 6) {
-      // Get the document XML
-      let documentXml = renderedZip.file('word/document.xml').asText();
-      
-      // Remove tables for defendants we don't need
-      const defendantsToRemove = [];
-      if (defendantCount < 3) defendantsToRemove.push('Third Defendant');
-      if (defendantCount < 4) defendantsToRemove.push('Fourth Defendant');
-      if (defendantCount < 5) defendantsToRemove.push('Fifth Defendant');
-      if (defendantCount < 6) defendantsToRemove.push('Sixth Defendant');
-      
-      for (const defendantLabel of defendantsToRemove) {
-        // Find and remove the table containing this defendant label
-        // Pattern: <w:tbl>...defendantLabel...</w:tbl> followed by optional spacing paragraph
-        const tablePattern = new RegExp(
-          `<w:tbl>([\\s\\S]*?)<w:t>${defendantLabel}</w:t>([\\s\\S]*?)</w:tbl>(?:\\s*<w:p[^>]*>\\s*<w:pPr/>\\s*</w:p>)?`,
-          'g'
-        );
-        
-        documentXml = documentXml.replace(tablePattern, '');
-      }
-      
-      // Update the XML in the zip
-      renderedZip.file('word/document.xml', documentXml);
-    }
-    
-    // Generate the final buffer
-    const buf = renderedZip.generate({
-      type: 'nodebuffer',
-      compression: 'DEFLATE'
-    });
 
     // Create filename
     const safeDefendantName = data.defendantName.replace(/[^a-zA-Z0-9]/g, '_');
@@ -111,7 +72,7 @@ export const handler = async (event) => {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'Content-Disposition': `attachment; filename="${filename}"`
       },
-      body: buf.toString('base64'),
+      body: result.data,
       isBase64Encoded: true
     };
 
