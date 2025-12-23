@@ -452,7 +452,7 @@
         // State management
         const state = {
             files: [],
-            extractedData: [], // Array of { filename, caseNumber, claimant, defendants: [{name, address}] }
+            extractedData: [], // Array of { filename, caseNumber, claimant, defendants: [{name, address}], gpcText }
             allDefendants: [] // Flattened list of all defendants with their case info
         };
 
@@ -571,7 +571,8 @@
                             claimant: data.claimant,
                             defendantName: defendant.name,
                             defendantAddress: defendant.address,
-                            allDefendants: defendantNames // Add all defendant names for this case
+                            allDefendants: defendantNames, // Add all defendant names for this case
+                            gpcText: data.gpcText // ADDED: Include the GPC text for registry extraction
                         });
                     });
                     
@@ -609,7 +610,13 @@
                 throw new Error('Failed to extract data');
             }
 
-            return await response.json();
+            const extractedData = await response.json();
+            
+            // ADDED: Include the full GPC text in the returned data
+            return {
+                ...extractedData,
+                gpcText: fullText
+            };
         }
 
         // Update file status
@@ -678,6 +685,22 @@
                     resultsList.appendChild(resultItem);
                 } catch (error) {
                     console.error('Error generating affidavit for', defendant.defendantName, error);
+                    
+                    // Show error in the list
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'result-item';
+                    resultItem.innerHTML = `
+                        <div class="result-info">
+                            <div class="result-case">${defendant.caseNumber}</div>
+                            <div class="result-defendant">${defendant.defendantName}</div>
+                        </div>
+                        <span class="status-badge status-error">Error generating</span>
+                    `;
+                    
+                    if (i === 0) {
+                        resultsList.innerHTML = '';
+                    }
+                    resultsList.appendChild(resultItem);
                 }
             }
         }
@@ -687,10 +710,12 @@
             const response = await fetch('/.netlify/functions/generate-affidavit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(defendant)
+                body: JSON.stringify(defendant) // Now includes gpcText
             });
 
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Error response:', errorText);
                 throw new Error(`Failed to generate affidavit for ${defendant.defendantName}`);
             }
 
