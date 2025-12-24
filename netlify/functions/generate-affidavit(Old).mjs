@@ -389,11 +389,9 @@ function extractRegistryInfo(gpcText) {
   for (let i = registryStart + 1; i < Math.min(registryStart + 6, lines.length); i++) {
     const line = lines[i].trim();
     
-    // Registry name - must be short (< 100 chars) and look like a court name
-    // ONLY update from line immediately after REGISTRY AT:
-    if (i === registryStart + 1 && line && line.length < 100 && 
-        !line.includes('Ph:') && !line.match(/^\d/) && !line.includes('Date lodged') &&
-        !line.includes('PART') && !line.includes('PLEASE READ')) {
+    // Registry name (e.g., "Central Law Courts") - ALWAYS update if found on next lines
+    // This overrides any name from the REGISTRY AT: line
+    if (line && !line.includes('Ph:') && !line.match(/^\d/) && !line.includes('Date lodged')) {
       const nameMatch = line.match(/^([^(]+?)(?:\s+\(|$)/);
       if (nameMatch && nameMatch[1].trim()) {
         registryInfo.name = nameMatch[1].trim();
