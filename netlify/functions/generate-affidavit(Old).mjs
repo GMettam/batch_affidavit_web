@@ -473,11 +473,8 @@ function extractLawFirmInfo(gpcText) {
   for (let i = serviceAddressStart; i < Math.min(serviceAddressStart + 10, lines.length); i++) {
     const line = lines[i].trim();
     
-    console.log(`Checking line ${i}: "${line.substring(0, 100)}"`);
-    
     // Stop when we hit "Description of Claim" or similar
     if (line.includes('Description of Claim') || line.includes('AND THE CLAIM')) {
-      console.log('Hit description section, stopping');
       break;
     }
     
