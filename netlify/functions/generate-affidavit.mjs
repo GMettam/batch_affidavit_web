@@ -401,22 +401,35 @@ function extractRegistryInfo(gpcText) {
 
 function extractLawFirmInfo(gpcText) {
   // Extract law firm information from GPC text
-  // Looking for "Claimant's address for service" section
+  // Looking for "Claimant's address for service" or "Defendant's address for service"
   
   const lawFirmInfo = {
     name: '',
     address: '',
     telephone: '',
     email: '',
-    reference: ''
+    reference: '',
+    lodgedBy: "Claimant's Lawyer" // Default, will update if we find Defendant
   };
   
   const lines = gpcText.split('\n');
   
-  // Find "Claimant's address for service" or "Claimant details"
+  // Determine if this is Claimant's or Defendant's lawyer
+  // Check if we find "Defendant's address for service" or "Defendant details"
+  const isDefendant = gpcText.includes("Defendant's address") || 
+                      gpcText.includes("Defendant details") ||
+                      gpcText.toLowerCase().includes("defendant ref:");
+  
+  if (isDefendant) {
+    lawFirmInfo.lodgedBy = "Defendant's Lawyer";
+  }
+  
+  // Find "address for service" or "Claimant details" or "Defendant details"
   let serviceAddressStart = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes('address for service') || lines[i].includes('Claimant details')) {
+    if (lines[i].includes('address for service') || 
+        lines[i].includes('Claimant details') ||
+        lines[i].includes('Defendant details')) {
       serviceAddressStart = i;
       break;
     }
@@ -497,7 +510,11 @@ function extractLawFirmInfo(gpcText) {
   // Build full address from collected lines
   lawFirmInfo.address = addressLines.join(', ');
   
-  console.log('Extracted law firm:', lawFirmInfo);
+  console.log('Extracted law firm - Name:', lawFirmInfo.name);
+  console.log('Extracted law firm - Address:', lawFirmInfo.address);
+  console.log('Extracted law firm - Tel:', lawFirmInfo.telephone);
+  console.log('Extracted law firm - Email:', lawFirmInfo.email);
+  console.log('Extracted law firm - Ref:', lawFirmInfo.reference);
   return lawFirmInfo;
 }
 
@@ -596,9 +613,9 @@ function fillLawFirmInfo(xml, lawFirmInfo) {
   let lawFirmTable = tables[tables.length - 1];
   
   // The table has 3 rows:
-  // Row 1: "Lodged by" | "Claimant's Lawyer"
-  // Row 2: "Address for service" | full address
-  // Row 3: "Contact details" | "Tel:" | phone | "Em:" | email | "Ref:" | reference
+  // Row 0: "Lodged by" | "Claimant's Lawyer" (should span remaining cells)
+  // Row 1: "Address for service" | full address (should span remaining cells)
+  // Row 2: "Contact details" | "Tel:" | phone | "Em:" | email | "Ref:" | reference
   
   const rows = lawFirmTable.match(/<w:tr[\s\S]*?<\/w:tr>/g);
   
@@ -607,67 +624,91 @@ function fillLawFirmInfo(xml, lawFirmInfo) {
     return xml;
   }
   
-  // Row 2: Fill in address (second cell)
-  let row2 = rows[1];
-  const row2Cells = row2.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
-  if (row2Cells && row2Cells.length >= 2) {
-    let addressCell = row2Cells[1];
+  console.log('Filling law firm table with:', lawFirmInfo);
+  
+  // Row 0: Fill in "Claimant's Lawyer" or "Defendant's Lawyer" in second cell
+  let row0 = rows[0];
+  const row0Cells = row0.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
+  if (row0Cells && row0Cells.length >= 2) {
+    let lawyerCell = row0Cells[1];
+    
+    // Find the first paragraph and add text
+    lawyerCell = lawyerCell.replace(
+      /(<w:tc>[\s\S]*?)(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
+      (match, cellStart, pStart, pContent, pEnd) => {
+        return cellStart + pStart + `<w:r><w:t>${escapeXml(lawFirmInfo.lodgedBy)}</w:t></w:r>` + pEnd;
+      }
+    );
+    
+    row0 = row0.replace(row0Cells[1], lawyerCell);
+  }
+  
+  // Row 1: Fill in address in second cell
+  let row1 = rows[1];
+  const row1Cells = row1.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
+  if (row1Cells && row1Cells.length >= 2) {
+    let addressCell = row1Cells[1];
     
     // Build full address string
     const fullAddress = `${lawFirmInfo.name}, ${lawFirmInfo.address}`;
+    console.log('Inserting address:', fullAddress);
     
+    // Find the first paragraph and add text
     addressCell = addressCell.replace(
-      /(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
-      (match, start, content, end) => {
-        return `${start}<w:r><w:t>${escapeXml(fullAddress)}</w:t></w:r>${end}`;
+      /(<w:tc>[\s\S]*?)(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
+      (match, cellStart, pStart, pContent, pEnd) => {
+        return cellStart + pStart + `<w:r><w:t>${escapeXml(fullAddress)}</w:t></w:r>` + pEnd;
       }
     );
     
-    row2 = row2.replace(row2Cells[1], addressCell);
+    row1 = row1.replace(row1Cells[1], addressCell);
   }
   
-  // Row 3: Fill in contact details (Tel, Email, Ref in cells 2, 4, 6)
-  let row3 = rows[2];
-  const row3Cells = row3.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
+  // Row 2: Fill in contact details (Tel in cell 2, Email in cell 4, Ref in cell 6)
+  let row2 = rows[2];
+  const row2Cells = row2.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
   
-  if (row3Cells && row3Cells.length >= 7) {
-    // Cell index 2 (3rd cell) contains telephone
-    let telCell = row3Cells[2];
+  if (row2Cells && row2Cells.length >= 7) {
+    console.log('Filling contact details - Tel:', lawFirmInfo.telephone, 'Email:', lawFirmInfo.email, 'Ref:', lawFirmInfo.reference);
+    
+    // Cell 2 (3rd cell) contains telephone
+    let telCell = row2Cells[2];
     telCell = telCell.replace(
-      /(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
-      (match, start, content, end) => {
-        return `${start}<w:r><w:t>${escapeXml(lawFirmInfo.telephone)}</w:t></w:r>${end}`;
+      /(<w:tc>[\s\S]*?)(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
+      (match, cellStart, pStart, pContent, pEnd) => {
+        return cellStart + pStart + `<w:r><w:t>${escapeXml(lawFirmInfo.telephone)}</w:t></w:r>` + pEnd;
       }
     );
     
-    // Cell index 4 (5th cell) contains email
-    let emailCell = row3Cells[4];
+    // Cell 4 (5th cell) contains email
+    let emailCell = row2Cells[4];
     emailCell = emailCell.replace(
-      /(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
-      (match, start, content, end) => {
-        return `${start}<w:r><w:t>${escapeXml(lawFirmInfo.email)}</w:t></w:r>${end}`;
+      /(<w:tc>[\s\S]*?)(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
+      (match, cellStart, pStart, pContent, pEnd) => {
+        return cellStart + pStart + `<w:r><w:t>${escapeXml(lawFirmInfo.email)}</w:t></w:r>` + pEnd;
       }
     );
     
-    // Cell index 6 (7th cell) contains reference
-    let refCell = row3Cells[6];
+    // Cell 6 (7th cell) contains reference
+    let refCell = row2Cells[6];
     refCell = refCell.replace(
-      /(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
-      (match, start, content, end) => {
-        return `${start}<w:r><w:t>${escapeXml(lawFirmInfo.reference)}</w:t></w:r>${end}`;
+      /(<w:tc>[\s\S]*?)(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
+      (match, cellStart, pStart, pContent, pEnd) => {
+        return cellStart + pStart + `<w:r><w:t>${escapeXml(lawFirmInfo.reference)}</w:t></w:r>` + pEnd;
       }
     );
     
     // Replace cells in row
-    row3 = row3.replace(row3Cells[2], telCell);
-    row3 = row3.replace(row3Cells[4], emailCell);
-    row3 = row3.replace(row3Cells[6], refCell);
+    row2 = row2.replace(row2Cells[2], telCell);
+    row2 = row2.replace(row2Cells[4], emailCell);
+    row2 = row2.replace(row2Cells[6], refCell);
   }
   
   // Replace rows in table
   let newTable = lawFirmTable;
-  newTable = newTable.replace(rows[1], row2);
-  newTable = newTable.replace(rows[2], row3);
+  newTable = newTable.replace(rows[0], row0);
+  newTable = newTable.replace(rows[1], row1);
+  newTable = newTable.replace(rows[2], row2);
   
   // Replace table in document
   return xml.replace(lawFirmTable, newTable);
