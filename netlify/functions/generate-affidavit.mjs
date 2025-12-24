@@ -29,6 +29,9 @@ export const handler = async (event) => {
     }
     
     // Extract registry information from GPC text
+    console.log('GPC text received, length:', data.gpcText ? data.gpcText.length : 0);
+    console.log('GPC text sample:', data.gpcText ? data.gpcText.substring(0, 300) : 'NO GPC TEXT');
+    
     const registryInfo = extractRegistryInfo(data.gpcText);
     console.log('Extracted registry info:', registryInfo);
     
