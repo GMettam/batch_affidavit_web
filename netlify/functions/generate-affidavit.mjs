@@ -581,7 +581,7 @@ function fillRegistryInfo(xml, registryInfo) {
   const registryParagraphsXml = registryLines.map((line, index) => {
     return `<w:p>
       <w:pPr>
-        <w:spacing w:after="60" w:line="240" w:lineRule="auto"/>
+        <w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>
         <w:jc w:val="left"/>
       </w:pPr>
       <w:r>
