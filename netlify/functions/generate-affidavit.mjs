@@ -358,30 +358,42 @@ function extractRegistryInfo(gpcText) {
   // Line with REGISTRY AT: might have the name on the same line or next
   let currentLine = lines[registryStart];
   
-  // Check if name is on same line as REGISTRY AT:
+  // Check if everything is on same line as REGISTRY AT:
   if (currentLine.includes('REGISTRY AT:')) {
     const afterRegistry = currentLine.substring(currentLine.indexOf('REGISTRY AT:') + 12).trim();
-    // Extract everything BEFORE street address or city/state/postcode
-    // Remove street numbers, city/state patterns
-    let cleanedName = afterRegistry
-      .replace(/\s+\d+\s+[A-Z][a-z]+.*$/, '') // Remove "501 Hay Street..." 
-      .replace(/\s+[A-Z]{2,}\s+WA\s+\d{4}.*$/, ''); // Remove "PERTH WA 6000"
     
-    const nameParts = cleanedName.split(/\s+(MAGISTRATES|Case|Ph:)/);
+    // Extract street address (number + street name before "Date" or city)
+    const streetMatch = afterRegistry.match(/(\d+\s+[A-Za-z\s]+?)(?=\s+Date|\s+[A-Z]{2,}\s+WA)/);
+    if (streetMatch) {
+      registryInfo.street = streetMatch[1].trim();
+    }
+    
+    // Extract city/state/postcode
+    const cityMatch = afterRegistry.match(/([A-Z\s]+?\s+WA\s+\d{4})/);
+    if (cityMatch) {
+      registryInfo.cityStatePostcode = cityMatch[1].trim();
+    }
+    
+    // Extract name - everything before the street number
+    let nameOnly = afterRegistry;
+    if (registryInfo.street) {
+      nameOnly = afterRegistry.substring(0, afterRegistry.indexOf(registryInfo.street)).trim();
+    }
+    const nameParts = nameOnly.split(/\s+(MAGISTRATES|Case|Ph:)/);
     if (nameParts[0].trim()) {
       registryInfo.name = nameParts[0].trim();
     }
   }
   
-  // Look at next few lines for registry details
+  // Look at next few lines for registry details - these override the single-line extraction
   for (let i = registryStart + 1; i < Math.min(registryStart + 6, lines.length); i++) {
     const line = lines[i].trim();
     
-    // Registry name (e.g., "Central Law Courts")
-    if (!registryInfo.name && line && !line.includes('Ph:') && !line.match(/\d{3,4}/)) {
-      // Extract registry name before any court type info
+    // Registry name (e.g., "Central Law Courts") - ALWAYS update if found on next lines
+    // This overrides any name from the REGISTRY AT: line
+    if (line && !line.includes('Ph:') && !line.match(/^\d/) && !line.includes('Date lodged')) {
       const nameMatch = line.match(/^([^(]+?)(?:\s+\(|$)/);
-      if (nameMatch) {
+      if (nameMatch && nameMatch[1].trim()) {
         registryInfo.name = nameMatch[1].trim();
       }
     }
@@ -463,19 +475,14 @@ function extractLawFirmInfo(gpcText) {
       break;
     }
     
-    // Extract firm name - it appears on the line with "address for service" or the next line
-    // Format: "Claimant's address McCabes" or just "McCabes"
-    if (!lawFirmInfo.name && line.includes('address') && !line.includes('for service:')) {
-      // Extract everything after "address" that looks like a firm name
-      const nameMatch = line.match(/address\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)/i);
-      if (nameMatch) {
-        lawFirmInfo.name = nameMatch[1].trim();
-      }
-    } else if (!lawFirmInfo.name && i === serviceAddressStart + 1 && line && !line.includes(':')) {
-      // Fallback: firm name might be on its own line
-      const nameMatch = line.match(/^([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)/);
-      if (nameMatch) {
-        lawFirmInfo.name = nameMatch[1].trim();
+    // Extract firm name - various formats:
+    // "Claimant's address McCabes"
+    // "Claimant's address for service: McCabes"
+    if (!lawFirmInfo.name) {
+      // Try: "address McCabes" or "address for service McCabes"
+      const pattern1 = line.match(/address(?:\s+for\s+service)?[:\s]+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)/i);
+      if (pattern1 && !pattern1[1].match(/^(for|service|Level|Suite)$/i)) {
+        lawFirmInfo.name = pattern1[1].trim();
       }
     }
     
