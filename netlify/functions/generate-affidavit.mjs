@@ -403,6 +403,10 @@ function extractLawFirmInfo(gpcText) {
   // Extract law firm information from GPC text
   // Looking for "Claimant's address for service" or "Defendant's address for service"
   
+  console.log('=== STARTING LAW FIRM EXTRACTION ===');
+  console.log('GPC text length:', gpcText.length);
+  console.log('First 500 chars:', gpcText.substring(0, 500));
+  
   const lawFirmInfo = {
     name: '',
     address: '',
@@ -549,31 +553,24 @@ function fillRegistryInfo(xml, registryInfo) {
   
   let registryCell = cells[0];
   
-  // Build the registry text with proper formatting (3 lines, Calibri 22pt)
+  // Build the registry text with proper formatting (3 lines, Calibri 22pt, NOT bold, NOT underlined)
   const registryLines = [
     registryInfo.name,
     registryInfo.street,
     registryInfo.cityStatePostcode
   ].filter(line => line); // Remove empty lines
   
-  // Create paragraph XML for each line
+  // Create paragraph XML for each line - without Heading2 style to avoid bold
   const registryParagraphsXml = registryLines.map((line, index) => {
-    return `<w:p w14:paraId="74091617" w14:textId="14ABB1D0" w:rsidR="00AE17F7" w:rsidRPr="00CC7920" w:rsidRDefault="00AE17F7" w:rsidP="00891684">
+    return `<w:p>
       <w:pPr>
-        <w:pStyle w:val="Heading2"/>
         <w:spacing w:after="60" w:line="240" w:lineRule="auto"/>
         <w:jc w:val="left"/>
-        <w:rPr>
-          <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
-          <w:b w:val="0"/>
-          <w:bCs w:val="0"/>
-          <w:sz w:val="22"/>
-          <w:u w:val="none"/>
-        </w:rPr>
       </w:pPr>
       <w:r>
         <w:rPr>
           <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+          <w:b w:val="0"/>
           <w:sz w:val="22"/>
           <w:u w:val="none"/>
         </w:rPr>
