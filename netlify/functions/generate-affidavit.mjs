@@ -447,8 +447,8 @@ function extractLawFirmInfo(gpcText) {
     lawFirmInfo.lodgedBy = "Defendant's Lawyer";
   }
   
-  // Find "Claimant's address for service:" in the text
-  const addressPattern = /Claimant's address for service:\s+([^\n]+?)(?=\s+Claimant ref:|Description of Claim)/i;
+  // Find "address for service:" in the text (with or without "Claimant's")
+  const addressPattern = /address for service:\s+(.+?)(?=\s+Claimant ref:|Description of Claim)/i;
   const addressMatch = gpcText.match(addressPattern);
   
   console.log('Address pattern matched?', addressMatch ? 'YES' : 'NO');
@@ -473,7 +473,10 @@ function extractLawFirmInfo(gpcText) {
     }
   } else {
     console.log('Address pattern did not match');
-    console.log('Sample of text around address:', gpcText.substring(gpcText.indexOf('address for service'), gpcText.indexOf('address for service') + 200));
+    const idx = gpcText.indexOf('address for service');
+    if (idx >= 0) {
+      console.log('Sample of text around address:', gpcText.substring(idx, idx + 200));
+    }
   }
   
   // Extract ref
