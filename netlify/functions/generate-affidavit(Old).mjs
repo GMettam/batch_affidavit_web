@@ -316,11 +316,9 @@ function fillServiceStatement(xml, defendantName, defendantOrdinal) {
   
   result = result.replace(/\[Name\]/g, escapeXml(defendantName));
   result = result.replace(/\[Defendant[^\]]*\]/g, `the ${defendantOrdinal} Defendant`);
-  
-  // Keep the brackets with placeholder text for manual entry
-  result = result.replace(/\[Date\]/g, '[Date]');
-  result = result.replace(/\[time[^\]]*\]/g, '[time]');
-  result = result.replace(/\[Place\]/g, '[Place]');
+  result = result.replace(/\[Date\]/g, '');
+  result = result.replace(/\[time[^\]]*\]/g, '');
+  result = result.replace(/\[Place\]/g, '');
   result = result.replace(/\[Name of process\]/g, 'General Procedure Claim');
   
   return result;
