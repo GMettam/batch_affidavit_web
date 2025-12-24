@@ -361,8 +361,13 @@ function extractRegistryInfo(gpcText) {
   // Check if name is on same line as REGISTRY AT:
   if (currentLine.includes('REGISTRY AT:')) {
     const afterRegistry = currentLine.substring(currentLine.indexOf('REGISTRY AT:') + 12).trim();
-    // Sometimes the name is on this line before other content
-    const nameParts = afterRegistry.split(/\s+(MAGISTRATES|Case|Ph:)/);
+    // Extract everything BEFORE street address or city/state/postcode
+    // Remove street numbers, city/state patterns
+    let cleanedName = afterRegistry
+      .replace(/\s+\d+\s+[A-Z][a-z]+.*$/, '') // Remove "501 Hay Street..." 
+      .replace(/\s+[A-Z]{2,}\s+WA\s+\d{4}.*$/, ''); // Remove "PERTH WA 6000"
+    
+    const nameParts = cleanedName.split(/\s+(MAGISTRATES|Case|Ph:)/);
     if (nameParts[0].trim()) {
       registryInfo.name = nameParts[0].trim();
     }
