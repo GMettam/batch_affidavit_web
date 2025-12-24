@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 export const handler = async (event) => {
+  console.log('★★★ LATEST VERSION WITH LAW FIRM EXTRACTION - DEC 24 2025 ★★★');
   console.log('Function invoked');
   
   if (event.httpMethod !== 'POST') {
@@ -481,10 +482,14 @@ function extractLawFirmInfo(gpcText) {
     // "Claimant's address McCabes"
     // "Claimant's address for service: McCabes"
     if (!lawFirmInfo.name) {
-      // Try: "address McCabes" or "address for service McCabes"
-      const pattern1 = line.match(/address(?:\s+for\s+service)?[:\s]+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)/i);
-      if (pattern1 && !pattern1[1].match(/^(for|service|Level|Suite)$/i)) {
-        lawFirmInfo.name = pattern1[1].trim();
+      // Simple pattern: find "address" followed by spaces and then a capitalized word
+      if (line.toLowerCase().includes('address') && !line.includes('for service:')) {
+        // Extract the word after "address"
+        const match = line.match(/address\s+(\w+)/i);
+        if (match && match[1] && !match[1].match(/^(for|Level|Suite|service)$/i)) {
+          lawFirmInfo.name = match[1].trim();
+          console.log(`Found firm name: "${lawFirmInfo.name}" from line: "${line}"`);
+        }
       }
     }
     
