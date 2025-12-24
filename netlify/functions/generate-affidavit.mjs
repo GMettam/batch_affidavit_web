@@ -440,25 +440,33 @@ function extractLawFirmInfo(gpcText) {
     
     // Extract firm name - it appears on the line with "address for service" or the next line
     // Format: "Claimant's address McCabes" or just "McCabes"
-    if (!lawFirmInfo.name && (line.includes('McCabes') || line.includes('Galvins') || line.includes('Porter'))) {
-      const nameMatch = line.match(/(?:address\s+for\s+service:?\s+)?([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)/i);
+    if (!lawFirmInfo.name && line.includes('address') && !line.includes('for service:')) {
+      // Extract everything after "address" that looks like a firm name
+      const nameMatch = line.match(/address\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)/i);
       if (nameMatch) {
-        // Clean up the name - remove "Claimant's address for service:" prefix
-        let name = nameMatch[1].trim();
-        name = name.replace(/^Claimant'?s?\s+address\s+/i, '');
-        name = name.replace(/^for\s+service:?\s*/i, '');
-        lawFirmInfo.name = name.trim();
+        lawFirmInfo.name = nameMatch[1].trim();
+      }
+    } else if (!lawFirmInfo.name && i === serviceAddressStart + 1 && line && !line.includes(':')) {
+      // Fallback: firm name might be on its own line
+      const nameMatch = line.match(/^([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)/);
+      if (nameMatch) {
+        lawFirmInfo.name = nameMatch[1].trim();
       }
     }
     
-    // Collect address lines (Level, street number patterns)
-    if (line.match(/^(?:Level|for\s+service:|Suite|\d+)/i)) {
-      addressLines.push(line.replace(/^for\s+service:?\s*/i, '').trim());
+    // Collect address lines (Level, Suite, street addresses with numbers, city/state/postcode)
+    if (line.match(/^(Level|Suite|\d+\s+[A-Z]|for\s+service:)/i) && !line.includes('Claimant')) {
+      let addrLine = line.replace(/^for\s+service:?\s*/i, '').trim();
+      if (addrLine) {
+        addressLines.push(addrLine);
+      }
     }
     
-    // City/State/Postcode
-    if (line.match(/[A-Z]{2,}\s+WA\s+\d{4}/)) {
-      addressLines.push(line.trim());
+    // City/State/Postcode - always collect this
+    if (line.match(/^[A-Z]{2,}\s+WA\s+\d{4}/)) {
+      if (!addressLines.some(l => l.includes(line.trim()))) {
+        addressLines.push(line.trim());
+      }
     }
     
     // Claimant ref
@@ -550,6 +558,7 @@ function fillRegistryInfo(xml, registryInfo) {
         <w:rPr>
           <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
           <w:sz w:val="22"/>
+          <w:u w:val="none"/>
         </w:rPr>
         <w:t>${escapeXml(line)}</w:t>
       </w:r>
