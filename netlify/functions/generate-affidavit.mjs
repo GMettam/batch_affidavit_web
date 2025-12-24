@@ -425,6 +425,9 @@ function extractRegistryInfo(gpcText) {
 function extractLawFirmInfo(gpcText) {
   console.log('=== STARTING LAW FIRM EXTRACTION ===');
   console.log('GPC text length:', gpcText.length);
+  console.log('Looking for pattern in text...');
+  console.log('Text contains "Claimant\'s address for service"?', gpcText.includes("Claimant's address for service"));
+  console.log('Text contains "Claimant ref"?', gpcText.includes("Claimant ref"));
   
   const lawFirmInfo = {
     name: '',
@@ -448,9 +451,11 @@ function extractLawFirmInfo(gpcText) {
   const addressPattern = /Claimant's address for service:\s+([^\n]+?)(?=\s+Claimant ref:|Description of Claim)/i;
   const addressMatch = gpcText.match(addressPattern);
   
+  console.log('Address pattern matched?', addressMatch ? 'YES' : 'NO');
+  
   if (addressMatch) {
     const fullLine = addressMatch[1].trim();
-    console.log('Found address line:', fullLine);
+    console.log('Found address line:', fullLine.substring(0, 100));
     
     // Extract firm name and address
     // Pattern: "McCabes Level 16, 44 St Georges Terrace PERTH WA 6000"
@@ -463,9 +468,12 @@ function extractLawFirmInfo(gpcText) {
       
       console.log('Extracted firm name:', lawFirmInfo.name);
       console.log('Extracted address:', lawFirmInfo.address);
+    } else {
+      console.log('Parts pattern did not match. Full line was:', fullLine);
     }
   } else {
     console.log('Address pattern did not match');
+    console.log('Sample of text around address:', gpcText.substring(gpcText.indexOf('address for service'), gpcText.indexOf('address for service') + 200));
   }
   
   // Extract ref
