@@ -423,12 +423,8 @@ function extractRegistryInfo(gpcText) {
 }
 
 function extractLawFirmInfo(gpcText) {
-  // Extract law firm information from GPC text
-  // Looking for "Claimant's address for service" or "Defendant's address for service"
-  
   console.log('=== STARTING LAW FIRM EXTRACTION ===');
   console.log('GPC text length:', gpcText.length);
-  console.log('First 500 chars:', gpcText.substring(0, 500));
   
   const lawFirmInfo = {
     name: '',
@@ -436,13 +432,10 @@ function extractLawFirmInfo(gpcText) {
     telephone: '',
     email: '',
     reference: '',
-    lodgedBy: "Claimant's Lawyer" // Default, will update if we find Defendant
+    lodgedBy: "Claimant's Lawyer"
   };
   
-  const lines = gpcText.split('\n');
-  
   // Determine if this is Claimant's or Defendant's lawyer
-  // Check if we find "Defendant's address for service" or "Defendant details"
   const isDefendant = gpcText.includes("Defendant's address") || 
                       gpcText.includes("Defendant details") ||
                       gpcText.toLowerCase().includes("defendant ref:");
@@ -451,124 +444,46 @@ function extractLawFirmInfo(gpcText) {
     lawFirmInfo.lodgedBy = "Defendant's Lawyer";
   }
   
-  // Find "address for service" or "Claimant details" or "Defendant details"
-  let serviceAddressStart = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes('address for service') || 
-        lines[i].includes('Claimant details') ||
-        lines[i].includes('Defendant details')) {
-      serviceAddressStart = i;
-      break;
-    }
+  // Find "Claimant's address for service:" in the text
+  const addressMatch = gpcText.match(/Claimant's address for service:\s*([^\d]+?)\s+(Level|Suite|\d+)\s+([^]+?)(?=\s+Claimant ref:|Description of Claim)/i);
+  
+  if (addressMatch) {
+    console.log('Found address section:', addressMatch[0].substring(0, 200));
+    
+    // Extract firm name (everything before Level/Suite/street number)
+    lawFirmInfo.name = addressMatch[1].trim();
+    console.log('Extracted firm name:', lawFirmInfo.name);
+    
+    // Extract full address (from Level/Suite/number to before ref/email)
+    const fullAddr = (addressMatch[2] + ' ' + addressMatch[3]).trim();
+    lawFirmInfo.address = fullAddr;
+    console.log('Extracted address:', lawFirmInfo.address);
   }
   
-  if (serviceAddressStart === -1) {
-    console.error('Claimant address for service not found in GPC text');
-    return lawFirmInfo;
+  // Extract ref
+  const refMatch = gpcText.match(/Claimant ref:\s*(\d+)/i);
+  if (refMatch) {
+    lawFirmInfo.reference = refMatch[1].trim();
   }
   
-  // Collect all text from the next several lines to build complete info
-  let addressLines = [];
-  
-  for (let i = serviceAddressStart; i < Math.min(serviceAddressStart + 10, lines.length); i++) {
-    const line = lines[i].trim();
-    
-    console.log(`Checking line ${i}: "${line.substring(0, 100)}"`);
-    
-    // Stop when we hit "Description of Claim" or similar
-    if (line.includes('Description of Claim') || line.includes('AND THE CLAIM')) {
-      console.log('Hit description section, stopping');
-      break;
-    }
-    
-    // Extract firm name - various formats:
-    // "Claimant's address McCabes"
-    // "Claimant's address for service: McCabes Level 16..."
-    if (!lawFirmInfo.name) {
-      // Pattern 1: "address for service: FirmName Address..."
-      if (line.includes('for service:')) {
-        // Capture firm name (everything before Level/Suite/street number)
-        const match = line.match(/for service:\s*(.+?)\s+(Level|Suite|\d+\s)/i);
-        if (match && match[1]) {
-          lawFirmInfo.name = match[1].trim();
-          console.log(`Found firm name (after 'for service:'): "${lawFirmInfo.name}"`);
-          
-          // Extract address from the same line - everything after "for service: FirmName"
-          const afterService = line.substring(line.indexOf('for service:') + 12).trim();
-          const afterName = afterService.substring(lawFirmInfo.name.length).trim();
-          
-          if (afterName) {
-            // Split by city/state to get just the street address
-            const cityMatch = afterName.match(/^(.+?)\s+([A-Z]{2,}\s+WA\s+\d{4})/);
-            if (cityMatch) {
-              addressLines.push(cityMatch[1].trim()); // Street address
-              addressLines.push(cityMatch[2].trim()); // City/state/postcode
-            } else {
-              addressLines.push(afterName);
-            }
-          }
-        }
-      }
-      // Pattern 2: "address FirmName" (without "for service:")
-      // e.g., "Claimant's address Porter Commercial"
-      else if (line.toLowerCase().includes('address')) {
-        // Capture everything after "address" that's before Level/Suite/street number
-        const match = line.match(/address\s+(.+?)(?:\s+(Level|Suite|\d+\s)|$)/i);
-        if (match && match[1] && !match[1].match(/^(for|service)$/i)) {
-          lawFirmInfo.name = match[1].trim();
-          console.log(`Found firm name (after 'address'): "${lawFirmInfo.name}"`);
-        }
-      }
-    }
-    
-    // Collect address lines (Level, Suite, street addresses with numbers, city/state/postcode)
-    if (line.match(/^(Level|Suite|\d+\s+[A-Z]|for\s+service:)/i) && !line.includes('Claimant')) {
-      let addrLine = line.replace(/^for\s+service:?\s*/i, '').trim();
-      if (addrLine) {
-        addressLines.push(addrLine);
-      }
-    }
-    
-    // City/State/Postcode - always collect this
-    if (line.match(/^[A-Z]{2,}\s+WA\s+\d{4}/)) {
-      if (!addressLines.some(l => l.includes(line.trim()))) {
-        addressLines.push(line.trim());
-      }
-    }
-    
-    // Claimant ref
-    if (line.includes('ref:')) {
-      const refMatch = line.match(/ref:\s*(\d+)/i);
-      if (refMatch) {
-        lawFirmInfo.reference = refMatch[1].trim();
-      }
-    }
-    
-    // Claimant email
-    if (line.includes('email:')) {
-      const emailMatch = line.match(/email:\s*(\S+@\S+)/i);
-      if (emailMatch) {
-        lawFirmInfo.email = emailMatch[1].trim();
-      }
-    }
-    
-    // Claimant telephone
-    if (line.includes('telephone:')) {
-      const telMatch = line.match(/telephone:\s*(\d+)/i);
-      if (telMatch) {
-        lawFirmInfo.telephone = telMatch[1].trim();
-      }
-    }
+  // Extract email  
+  const emailMatch = gpcText.match(/Claimant email:\s*(\S+@\S+)/i);
+  if (emailMatch) {
+    lawFirmInfo.email = emailMatch[1].trim();
   }
   
-  // Build full address from collected lines
-  lawFirmInfo.address = addressLines.join(', ');
+  // Extract telephone
+  const telMatch = gpcText.match(/Claimant telephone:\s*(\d+)/i);
+  if (telMatch) {
+    lawFirmInfo.telephone = telMatch[1].trim();
+  }
   
   console.log('Extracted law firm - Name:', lawFirmInfo.name);
   console.log('Extracted law firm - Address:', lawFirmInfo.address);
   console.log('Extracted law firm - Tel:', lawFirmInfo.telephone);
   console.log('Extracted law firm - Email:', lawFirmInfo.email);
   console.log('Extracted law firm - Ref:', lawFirmInfo.reference);
+  
   return lawFirmInfo;
 }
 
