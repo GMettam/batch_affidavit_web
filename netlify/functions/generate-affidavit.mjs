@@ -480,15 +480,40 @@ function extractLawFirmInfo(gpcText) {
     
     // Extract firm name - various formats:
     // "Claimant's address McCabes"
-    // "Claimant's address for service: McCabes"
+    // "Claimant's address for service: McCabes Level 16..."
     if (!lawFirmInfo.name) {
-      // Simple pattern: find "address" followed by spaces and then a capitalized word
-      if (line.toLowerCase().includes('address') && !line.includes('for service:')) {
-        // Extract the word after "address"
-        const match = line.match(/address\s+(\w+)/i);
-        if (match && match[1] && !match[1].match(/^(for|Level|Suite|service)$/i)) {
+      // Pattern 1: "address for service: FirmName Address..."
+      if (line.includes('for service:')) {
+        // Capture firm name (everything before Level/Suite/street number)
+        const match = line.match(/for service:\s*(.+?)\s+(Level|Suite|\d+\s)/i);
+        if (match && match[1]) {
           lawFirmInfo.name = match[1].trim();
-          console.log(`Found firm name: "${lawFirmInfo.name}" from line: "${line}"`);
+          console.log(`Found firm name (after 'for service:'): "${lawFirmInfo.name}"`);
+          
+          // Extract address from the same line - everything after "for service: FirmName"
+          const afterService = line.substring(line.indexOf('for service:') + 12).trim();
+          const afterName = afterService.substring(lawFirmInfo.name.length).trim();
+          
+          if (afterName) {
+            // Split by city/state to get just the street address
+            const cityMatch = afterName.match(/^(.+?)\s+([A-Z]{2,}\s+WA\s+\d{4})/);
+            if (cityMatch) {
+              addressLines.push(cityMatch[1].trim()); // Street address
+              addressLines.push(cityMatch[2].trim()); // City/state/postcode
+            } else {
+              addressLines.push(afterName);
+            }
+          }
+        }
+      }
+      // Pattern 2: "address FirmName" (without "for service:")
+      // e.g., "Claimant's address Porter Commercial"
+      else if (line.toLowerCase().includes('address')) {
+        // Capture everything after "address" that's before Level/Suite/street number
+        const match = line.match(/address\s+(.+?)(?:\s+(Level|Suite|\d+\s)|$)/i);
+        if (match && match[1] && !match[1].match(/^(for|service)$/i)) {
+          lawFirmInfo.name = match[1].trim();
+          console.log(`Found firm name (after 'address'): "${lawFirmInfo.name}"`);
         }
       }
     }
