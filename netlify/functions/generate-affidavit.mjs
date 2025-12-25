@@ -493,8 +493,8 @@ function extractLawFirmInfo(gpcText) {
     lawFirmInfo.email = emailMatch[1].trim();
   }
   
-  // Extract telephone - handles formats like "(08) 9476 3800" or "0892213110"
-  const telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s]+)/i);
+  // Extract telephone - handles all formats: "(08) 9476 3800", "0892213110", "0412 345 678", etc.
+  const telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s-]+?)(?=\s+(?:Claimant email:|Description of Claim|$))/i);
   if (telMatch) {
     lawFirmInfo.telephone = telMatch[1].trim();
   }
