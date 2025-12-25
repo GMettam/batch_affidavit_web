@@ -181,8 +181,8 @@ function processDocument(xml, data, registryInfo, lawFirmInfo) {
   // Step 1: Fill in case number
   result = fillTableValue(result, 0, data.caseNumber);
   
-  // Step 2: Fill in claimant 
-  result = fillTableValue(result, 1, data.claimant);
+  // Step 2: Fill in claimant (uppercase)
+  result = fillTableValue(result, 1, data.claimant.toUpperCase());
   
   // Step 3: Fill first defendant
   result = fillDefendantTable(result, 2, 'First Defendant', defendants[0]);
@@ -482,7 +482,7 @@ function extractLawFirmInfo(gpcText) {
   }
   
   // Extract ref
-  const refMatch = gpcText.match(/Claimant ref:\s*(\d+)/i);
+  const refMatch = gpcText.match(/Claimant ref:\s*([^\s]+(?:\s+[^\s]+)*?)(?=\s+Claimant email:|Claimant telephone:|Description of Claim)/i);
   if (refMatch) {
     lawFirmInfo.reference = refMatch[1].trim();
   }
@@ -493,8 +493,8 @@ function extractLawFirmInfo(gpcText) {
     lawFirmInfo.email = emailMatch[1].trim();
   }
   
-  // Extract telephone
-  const telMatch = gpcText.match(/Claimant telephone:\s*(\d+)/i);
+  // Extract telephone - handles formats like "(08) 9476 3800" or "0892213110"
+  const telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s]+)/i);
   if (telMatch) {
     lawFirmInfo.telephone = telMatch[1].trim();
   }
