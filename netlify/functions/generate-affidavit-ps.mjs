@@ -742,22 +742,19 @@ function fillDefendantTablePS(xml, tableIndex, label, allDefendants) {
     return xml;
   }
   
-  // First cell gets the label
+  // First cell gets the label - preserve existing formatting
   let labelCell = cells[0];
   labelCell = labelCell.replace(
-    /(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
-    (match, start, content, end) => {
-      return `${start}<w:r><w:t>${escapeXml(label)}</w:t></w:r>${end}`;
-    }
+    /<w:t>.*?<\/w:t>/,
+    `<w:t>${escapeXml(label)}</w:t>`
   );
   
-  // Second cell gets all defendants (formatted and comma-separated)
+  // Second cell gets all defendants - preserve existing formatting (which includes bold)
   let valueCell = cells[1];
+  // Look for existing <w:t> tags and replace their content
   valueCell = valueCell.replace(
-    /(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
-    (match, start, content, end) => {
-      return `${start}<w:r><w:t>${escapeXml(allDefendants)}</w:t></w:r>${end}`;
-    }
+    /<w:t>.*?<\/w:t>/,
+    `<w:t>${escapeXml(allDefendants)}</w:t>`
   );
   
   // Replace cells in table
@@ -766,18 +763,21 @@ function fillDefendantTablePS(xml, tableIndex, label, allDefendants) {
 }
 
 function fillServiceStatementPS(xml, formattedDefendantName, defendantOrdinal) {
-  // Find the service statement paragraph (contains placeholder text)
-  // Replace with formatted defendant name
+  // Replace "the First Defendant" or ordinal references with actual defendant name
+  // Also replace the placeholder "Joe BLOGGS" with the actual defendant name
   
-  // Look for the paragraph that contains service statement text
-  // This is typically in a paragraph after the defendant tables
-  const servicePattern = /I,[\s\S]*?served[\s\S]*?General Procedure Claim/i;
+  let result = xml;
   
-  // Replace "the First Defendant" with "the defendant [formatted name]" or similar
-  // For PS version, we use the formatted name directly
-  let result = xml.replace(
+  // Replace ordinal references like "the First Defendant"
+  result = result.replace(
     /the\s+(First|Second|Third|Fourth|Fifth|Sixth)\s+Defendant/g,
-    `the defendant ${formattedDefendantName}`
+    `${formattedDefendantName}`
+  );
+  
+  // Replace the placeholder "Joe BLOGGS" with actual defendant name
+  result = result.replace(
+    /Joe BLOGGS/g,
+    formattedDefendantName
   );
   
   return result;
