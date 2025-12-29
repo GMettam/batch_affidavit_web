@@ -24,8 +24,6 @@
             --bg-light: #F8F9FA;
             --border: #E0E0E0;
             --shadow: rgba(91, 78, 156, 0.15);
-            --secondary: #6C757D;
-            --secondary-dark: #5A6268;
         }
 
         body {
@@ -227,17 +225,6 @@
             box-shadow: 0 4px 12px var(--shadow);
         }
 
-        .button-secondary {
-            background: var(--secondary);
-            color: white;
-        }
-
-        .button-secondary:hover:not(:disabled) {
-            background: var(--secondary-dark);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
-        }
-
         .button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -248,7 +235,6 @@
             gap: 15px;
             margin-top: 30px;
             justify-content: center;
-            flex-wrap: wrap;
         }
 
         .progress-container {
@@ -392,15 +378,6 @@
             .upload-zone {
                 padding: 40px 20px;
             }
-            
-            .button-group {
-                flex-direction: column;
-            }
-            
-            .button {
-                width: 100%;
-                justify-content: center;
-            }
         }
     </style>
 </head>
@@ -440,12 +417,8 @@
             </div>
 
             <div class="button-group">
-                <button class="button button-primary" id="process-button-standard" disabled>
-                    <span>Generate Affidavits (Standard)</span>
-                    <span>→</span>
-                </button>
-                <button class="button button-secondary" id="process-button-ps" disabled>
-                    <span>Generate Affidavits (Process Server)</span>
+                <button class="button button-primary" id="process-button" disabled>
+                    <span>Process & Generate Affidavits</span>
                     <span>→</span>
                 </button>
             </div>
@@ -479,17 +452,15 @@
         // State management
         const state = {
             files: [],
-            extractedData: [],
-            allDefendants: [],
-            currentVersion: null // Track which version was clicked
+            extractedData: [], // Array of { filename, caseNumber, claimant, defendants: [{name, address}], gpcText }
+            allDefendants: [] // Flattened list of all defendants with their case info
         };
 
         // DOM elements
         const uploadZone = document.getElementById('upload-zone');
         const fileInput = document.getElementById('file-input');
         const fileList = document.getElementById('file-list');
-        const processButtonStandard = document.getElementById('process-button-standard');
-        const processButtonPS = document.getElementById('process-button-ps');
+        const processButton = document.getElementById('process-button');
         const progressContainer = document.getElementById('progress-container');
         const progressFill = document.getElementById('progress-fill');
         const progressText = document.getElementById('progress-text');
@@ -531,8 +502,7 @@
 
             state.files = pdfFiles;
             displayFiles();
-            processButtonStandard.disabled = false;
-            processButtonPS.disabled = false;
+            processButton.disabled = false;
         }
 
         // Display selected files
@@ -559,22 +529,9 @@
             });
         }
 
-        // Process files button - STANDARD VERSION
-        processButtonStandard.addEventListener('click', async () => {
-            state.currentVersion = 'standard';
-            await startProcessing();
-        });
-
-        // Process files button - PROCESS SERVER VERSION
-        processButtonPS.addEventListener('click', async () => {
-            state.currentVersion = 'ps';
-            await startProcessing();
-        });
-
-        // Start processing
-        async function startProcessing() {
-            processButtonStandard.disabled = true;
-            processButtonPS.disabled = true;
+        // Process files button
+        processButton.addEventListener('click', async () => {
+            processButton.disabled = true;
             progressContainer.classList.remove('hidden');
             
             await processAllFiles();
@@ -583,7 +540,7 @@
             displayResults();
             resultsSection.classList.remove('hidden');
             resultsSection.scrollIntoView({ behavior: 'smooth' });
-        }
+        });
 
         // Process all files
         async function processAllFiles() {
@@ -604,6 +561,7 @@
                     }
                     
                     // Flatten defendants for easier processing
+                    // Extract just the names for the allDefendants array
                     const defendantNames = data.defendants.map(d => d.name);
                     
                     data.defendants.forEach(defendant => {
@@ -613,8 +571,8 @@
                             claimant: data.claimant,
                             defendantName: defendant.name,
                             defendantAddress: defendant.address,
-                            allDefendants: defendantNames,
-                            gpcText: data.gpcText
+                            allDefendants: defendantNames, // Add all defendant names for this case
+                            gpcText: data.gpcText // ADDED: Include the GPC text for registry extraction
                         });
                     });
                     
@@ -654,6 +612,7 @@
 
             const extractedData = await response.json();
             
+            // ADDED: Include the full GPC text in the returned data
             return {
                 ...extractedData,
                 gpcText: fullText
@@ -685,7 +644,6 @@
             // Show summary stats
             const totalGPCs = state.files.length;
             const totalDefendants = state.allDefendants.length;
-            const versionLabel = state.currentVersion === 'ps' ? 'Process Server' : 'Standard';
             
             summaryStats.innerHTML = `
                 <div class="stat-box">
@@ -694,7 +652,7 @@
                 </div>
                 <div class="stat-box">
                     <div class="stat-number">${totalDefendants}</div>
-                    <div class="stat-label">Affidavits Generated (${versionLabel})</div>
+                    <div class="stat-label">Affidavits Generated</div>
                 </div>
             `;
             
@@ -728,6 +686,7 @@
                 } catch (error) {
                     console.error('Error generating affidavit for', defendant.defendantName, error);
                     
+                    // Show error in the list
                     const resultItem = document.createElement('div');
                     resultItem.className = 'result-item';
                     resultItem.innerHTML = `
@@ -746,17 +705,12 @@
             }
         }
 
-        // Generate single affidavit - UPDATED TO USE CORRECT ENDPOINT
+        // Generate single affidavit
         async function generateAffidavit(defendant) {
-            // Choose endpoint based on which button was clicked
-            const endpoint = state.currentVersion === 'ps' 
-                ? '/.netlify/functions/generate-affidavit-ps'
-                : '/.netlify/functions/generate-affidavit';
-            
-            const response = await fetch(endpoint, {
+            const response = await fetch('/.netlify/functions/generate-affidavit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(defendant)
+                body: JSON.stringify(defendant) // Now includes gpcText
             });
 
             if (!response.ok) {
