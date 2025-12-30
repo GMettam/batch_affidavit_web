@@ -728,6 +728,48 @@ function formatDefendantName(name) {
   return `${givenNames} ${surname}`;
 }
 
+function formatAddress(address) {
+  // Format address: add comma after street type, convert suburb to title case
+  // Example: "330 Maine-Anjou Drive LOWER CHITTERING WA 6084" 
+  //       -> "330 Maine-Anjou Drive, Lower Chittering WA 6084"
+  
+  if (!address) return '';
+  
+  // Common Australian street types
+  const streetTypes = [
+    'Street', 'St', 'Road', 'Rd', 'Drive', 'Dr', 'Avenue', 'Ave', 
+    'Court', 'Ct', 'Place', 'Pl', 'Crescent', 'Cres', 'Lane', 'La',
+    'Way', 'Terrace', 'Tce', 'Circuit', 'Cct', 'Close', 'Cl',
+    'Boulevard', 'Blvd', 'Parade', 'Pde', 'Highway', 'Hwy',
+    'Grove', 'Gr', 'Rise', 'Mews', 'Walk', 'Gardens', 'Gdns'
+  ];
+  
+  // Create a regex pattern that matches any street type (case insensitive)
+  const streetTypePattern = streetTypes.join('|');
+  const regex = new RegExp(`\\b(${streetTypePattern})\\b(?!,)`, 'i');
+  
+  let formatted = address;
+  
+  // Add comma after street type if not already present
+  formatted = formatted.replace(regex, '$1,');
+  
+  // Now convert suburb/town to title case
+  // The suburb is typically after the street type and before the state (WA, NSW, etc.)
+  // Pattern: "Drive, LOWER CHITTERING WA" -> "Drive, Lower Chittering WA"
+  formatted = formatted.replace(/,\s+([A-Z\s]+)\s+(WA|NSW|VIC|QLD|SA|TAS|NT|ACT)\s+(\d{4})/g, 
+    (match, suburb, state, postcode) => {
+      // Convert suburb to title case
+      const titleCaseSuburb = suburb.toLowerCase().split(' ').map(word => {
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      }).join(' ');
+      
+      return `, ${titleCaseSuburb} ${state} ${postcode}`;
+    }
+  );
+  
+  return formatted;
+}
+
 function fillDefendantTablePS(xml, tableIndex, label, allDefendants) {
   // PS version: Fill ONE defendant table with ALL defendants (comma-separated)
   const tables = xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g);
@@ -766,7 +808,7 @@ function fillDefendantTablePS(xml, tableIndex, label, allDefendants) {
 function fillServiceStatementPS(xml, formattedDefendantName, defendantAddress) {
   // Replace "the First Defendant" or ordinal references with actual defendant name
   // Also replace the placeholder "Joe BLOGGS" with the actual defendant name
-  // Replace [Place] with the defendant's address
+  // Replace [Place] with the defendant's address (formatted)
   
   let result = xml;
   
@@ -782,11 +824,12 @@ function fillServiceStatementPS(xml, formattedDefendantName, defendantAddress) {
     formattedDefendantName
   );
   
-  // Replace [Place] with the defendant's address
+  // Replace [Place] with the defendant's address (formatted with comma and title case suburb)
   if (defendantAddress) {
+    const formattedAddress = formatAddress(defendantAddress);
     result = result.replace(
       /\[Place\]/g,
-      defendantAddress
+      formattedAddress
     );
   }
   
