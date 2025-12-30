@@ -493,9 +493,10 @@ function extractLawFirmInfo(gpcText) {
   }
   
   // Extract telephone - handles formats like "(08) 9476 3800" or "0892213110"
-  const telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s]+)/i);
+  const telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s-]+?)(?=\s+(?:Claimant email:|Description of Claim|$))/i);
   if (telMatch) {
-    lawFirmInfo.telephone = telMatch[1].trim();
+    // Format the phone number to standard Australian format
+    lawFirmInfo.telephone = formatPhoneNumber(telMatch[1].trim());
   }
   
   console.log('Extracted law firm - Name:', lawFirmInfo.name);
@@ -768,6 +769,37 @@ function formatAddress(address) {
   );
   
   return formatted;
+}
+
+function formatPhoneNumber(phone) {
+  // Format Australian phone numbers to (XX) XXXX XXXX format
+  // Handles: "0892213110", "(08) 9221 3110", "08 9221 3110", etc.
+  
+  if (!phone) return '';
+  
+  // Remove all non-digit characters
+  const digitsOnly = phone.replace(/\D/g, '');
+  
+  // Check if it's a 10-digit Australian number starting with 0
+  if (digitsOnly.length === 10 && digitsOnly.startsWith('0')) {
+    // Format as (0X) XXXX XXXX
+    const areaCode = digitsOnly.substring(0, 2);
+    const firstPart = digitsOnly.substring(2, 6);
+    const secondPart = digitsOnly.substring(6, 10);
+    return `(${areaCode}) ${firstPart} ${secondPart}`;
+  }
+  
+  // Check if it's a mobile number (starting with 04, 10 digits)
+  if (digitsOnly.length === 10 && digitsOnly.startsWith('04')) {
+    // Format as 04XX XXX XXX
+    const prefix = digitsOnly.substring(0, 4);
+    const firstPart = digitsOnly.substring(4, 7);
+    const secondPart = digitsOnly.substring(7, 10);
+    return `${prefix} ${firstPart} ${secondPart}`;
+  }
+  
+  // If format doesn't match, return as-is (already formatted or unusual format)
+  return phone;
 }
 
 function fillDefendantTablePS(xml, tableIndex, label, allDefendants) {
