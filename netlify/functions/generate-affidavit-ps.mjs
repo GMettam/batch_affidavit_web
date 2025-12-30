@@ -497,18 +497,46 @@ function extractLawFirmInfo(gpcText) {
   const telIdx = gpcText.toLowerCase().indexOf('claimant telephone:');
   if (telIdx >= 0) {
     console.log('Text around telephone field:', gpcText.substring(telIdx, telIdx + 150));
+  } else {
+    console.log('WARNING: Could not find "Claimant telephone:" in text');
   }
   
-  const telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s-]+?)(?=\s+(?:Claimant email:|Description of Claim|$))/i);
-  console.log('Telephone regex match result:', telMatch);
+  // Try multiple patterns to extract phone number
+  let telMatch = null;
+  let rawPhone = null;
+  
+  // Pattern 1: Most specific - stops at mobile, email, or description
+  telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s-]+?)(?=\s+Claimant mobile:|Claimant email:|Description of Claim)/i);
   if (telMatch) {
-    const rawPhone = telMatch[1].trim();
-    console.log('Raw phone extracted:', rawPhone);
+    rawPhone = telMatch[1].trim();
+    console.log('Pattern 1 matched. Raw phone:', rawPhone);
+  }
+  
+  // Pattern 2: Simpler - just grab digits and formatting chars after "telephone:"
+  if (!rawPhone) {
+    telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s-]+)/i);
+    if (telMatch) {
+      // Take first 20 characters max to avoid grabbing too much
+      rawPhone = telMatch[1].trim().substring(0, 20).trim();
+      console.log('Pattern 2 matched. Raw phone:', rawPhone);
+    }
+  }
+  
+  // Pattern 3: Most permissive - anything after telephone
+  if (!rawPhone) {
+    telMatch = gpcText.match(/telephone:\s*([^\n\r]+)/i);
+    if (telMatch) {
+      rawPhone = telMatch[1].trim();
+      console.log('Pattern 3 matched. Raw phone:', rawPhone);
+    }
+  }
+  
+  if (rawPhone) {
     // Format the phone number to standard Australian format
     lawFirmInfo.telephone = formatPhoneNumber(rawPhone);
     console.log('Formatted phone:', lawFirmInfo.telephone);
   } else {
-    console.log('WARNING: No phone number matched!');
+    console.log('WARNING: No phone number matched with any pattern!');
   }
   
   console.log('Extracted law firm - Name:', lawFirmInfo.name);
