@@ -170,6 +170,7 @@ function processDocument(xml, data, registryInfo, lawFirmInfo) {
   console.log('Processing document for:', currentDefendant);
   console.log('Defendant index:', defendantIndex, 'Ordinal:', defendantOrdinal);
   console.log('All defendants:', defendants);
+  console.log('Defendant address:', data.defendantAddress);
   console.log('Registry info:', registryInfo);
   console.log('Law firm info:', lawFirmInfo);
   
@@ -189,9 +190,9 @@ function processDocument(xml, data, registryInfo, lawFirmInfo) {
   const formattedDefendants = defendants.map(d => formatDefendantName(d)).join(', ');
   result = fillDefendantTablePS(result, 2, 'Defendant', formattedDefendants);
   
-  // Step 4: Fill service statement - use formatted current defendant name
+  // Step 4: Fill service statement - use formatted current defendant name AND address
   const formattedCurrentDefendant = formatDefendantName(currentDefendant);
-  result = fillServiceStatementPS(result, formattedCurrentDefendant, defendantOrdinal);
+  result = fillServiceStatementPS(result, formattedCurrentDefendant, data.defendantAddress);
   
   // Step 5: Fill law firm lodgement details at bottom
   result = fillLawFirmInfo(result, lawFirmInfo);
@@ -762,9 +763,10 @@ function fillDefendantTablePS(xml, tableIndex, label, allDefendants) {
   return xml.replace(table, newTable);
 }
 
-function fillServiceStatementPS(xml, formattedDefendantName, defendantOrdinal) {
+function fillServiceStatementPS(xml, formattedDefendantName, defendantAddress) {
   // Replace "the First Defendant" or ordinal references with actual defendant name
   // Also replace the placeholder "Joe BLOGGS" with the actual defendant name
+  // Replace [Place] with the defendant's address
   
   let result = xml;
   
@@ -779,6 +781,14 @@ function fillServiceStatementPS(xml, formattedDefendantName, defendantOrdinal) {
     /Joe BLOGGS/g,
     formattedDefendantName
   );
+  
+  // Replace [Place] with the defendant's address
+  if (defendantAddress) {
+    result = result.replace(
+      /\[Place\]/g,
+      defendantAddress
+    );
+  }
   
   return result;
 }
