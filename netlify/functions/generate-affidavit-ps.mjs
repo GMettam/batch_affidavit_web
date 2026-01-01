@@ -36,6 +36,10 @@ export const handler = async (event) => {
     const registryInfo = extractRegistryInfo(data.gpcText);
     console.log('Extracted registry info:', registryInfo);
     
+    // Extract date lodged from GPC text
+    const dateLodged = extractDateLodged(data.gpcText);
+    console.log('Extracted date lodged:', dateLodged);
+    
     // Extract law firm information from GPC text
     const lawFirmInfo = extractLawFirmInfo(data.gpcText);
     console.log('Extracted law firm info:', lawFirmInfo);
@@ -109,7 +113,7 @@ export const handler = async (event) => {
     console.log('Original XML length:', docXml.length);
     
     // Process the document
-    docXml = processDocument(docXml, data, registryInfo, lawFirmInfo);
+    docXml = processDocument(docXml, data, registryInfo, lawFirmInfo, dateLodged);
     console.log('Processed XML length:', docXml.length);
     
     // Update the document
@@ -160,7 +164,7 @@ export const handler = async (event) => {
   }
 };
 
-function processDocument(xml, data, registryInfo, lawFirmInfo) {
+function processDocument(xml, data, registryInfo, lawFirmInfo, dateLodged) {
   const defendants = data.allDefendants;
   const currentDefendant = data.defendantName;
   const defendantIndex = defendants.indexOf(currentDefendant);
@@ -171,6 +175,7 @@ function processDocument(xml, data, registryInfo, lawFirmInfo) {
   console.log('Defendant index:', defendantIndex, 'Ordinal:', defendantOrdinal);
   console.log('All defendants:', defendants);
   console.log('Defendant address:', data.defendantAddress);
+  console.log('Date lodged:', dateLodged);
   console.log('Registry info:', registryInfo);
   console.log('Law firm info:', lawFirmInfo);
   
@@ -190,9 +195,9 @@ function processDocument(xml, data, registryInfo, lawFirmInfo) {
   const formattedDefendants = defendants.map(d => formatDefendantName(d)).join(', ');
   result = fillDefendantTablePS(result, 2, 'Defendant', formattedDefendants);
   
-  // Step 4: Fill service statement - use formatted current defendant name AND address
+  // Step 4: Fill service statement - use formatted current defendant name, address, and date lodged
   const formattedCurrentDefendant = formatDefendantName(currentDefendant);
-  result = fillServiceStatementPS(result, formattedCurrentDefendant, data.defendantAddress);
+  result = fillServiceStatementPS(result, formattedCurrentDefendant, data.defendantAddress, dateLodged);
   
   // Step 5: Fill law firm lodgement details at bottom
   result = fillLawFirmInfo(result, lawFirmInfo);
@@ -421,6 +426,19 @@ function extractRegistryInfo(gpcText) {
   
   console.log('Extracted registry:', registryInfo);
   return registryInfo;
+}
+
+function extractDateLodged(gpcText) {
+  // Extract the date from "Date lodged: DD/MM/YYYY"
+  const dateMatch = gpcText.match(/Date lodged:\s*(\d{2}\/\d{2}\/\d{4})/i);
+  
+  if (dateMatch) {
+    console.log('Extracted date lodged:', dateMatch[1]);
+    return dateMatch[1];
+  }
+  
+  console.log('Date lodged not found in GPC');
+  return '';
 }
 
 function extractLawFirmInfo(gpcText) {
@@ -877,10 +895,11 @@ function fillDefendantTablePS(xml, tableIndex, label, allDefendants) {
   return xml.replace(table, newTable);
 }
 
-function fillServiceStatementPS(xml, formattedDefendantName, defendantAddress) {
+function fillServiceStatementPS(xml, formattedDefendantName, defendantAddress, dateLodged) {
   // Replace "the First Defendant" or ordinal references with actual defendant name
   // Also replace the placeholder "Joe BLOGGS" with the actual defendant name
   // Replace [Place] with the defendant's address (formatted)
+  // Replace [date] with the date lodged
   
   let result = xml;
   
@@ -902,6 +921,14 @@ function fillServiceStatementPS(xml, formattedDefendantName, defendantAddress) {
     result = result.replace(
       /\[Place\]/g,
       formattedAddress
+    );
+  }
+  
+  // Replace [date] with the date lodged (appears in "lodged on [date]:")
+  if (dateLodged) {
+    result = result.replace(
+      /\[date\]/g,
+      dateLodged
     );
   }
   
