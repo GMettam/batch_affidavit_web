@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 export const handler = async (event) => {
-  console.log('★★★ PROCESS SERVER VERSION - DEC 29 2025 ★★★');
+  console.log('★★★ FIXED VERSION - FORCE REPLACE CLAIMANT - JAN 15 2026 ★★★');
   console.log('Function invoked');
   
   if (event.httpMethod !== 'POST') {
@@ -29,9 +29,11 @@ export const handler = async (event) => {
       }
     }
     
+    // Log the claimant name being processed
+    console.log('CLAIMANT NAME RECEIVED:', data.claimant);
+    
     // Extract registry information from GPC text
     console.log('GPC text received, length:', data.gpcText ? data.gpcText.length : 0);
-    console.log('GPC text sample:', data.gpcText ? data.gpcText.substring(0, 300) : 'NO GPC TEXT');
     
     const registryInfo = extractRegistryInfo(data.gpcText);
     console.log('Extracted registry info:', registryInfo);
@@ -45,20 +47,14 @@ export const handler = async (event) => {
     console.log('Extracted law firm info:', lawFirmInfo);
 
     // In Netlify, the template should be bundled with the function
-    // Try multiple possible paths
     const templateFilename = 'Form_11_-_Affidavit_of_Service_PS.docx';
     let content;
     let foundPath = null;
     
     // Possible paths where the template might be
     const possiblePaths = [
-      // Same directory as the function (most likely after bundling)
       `./${templateFilename}`,
-      // In the function directory
       `./netlify/functions/${templateFilename}`,
-      // At the root
-      `./${templateFilename}`,
-      // Absolute path
       `/var/task/${templateFilename}`,
       `/var/task/netlify/functions/${templateFilename}`
     ];
@@ -79,17 +75,6 @@ export const handler = async (event) => {
     
     if (!foundPath) {
       console.error('Template file not found in any location');
-      console.error('Current working directory:', process.cwd());
-      
-      // Try to list what files are available
-      try {
-        const fs = await import('fs');
-        const files = fs.readdirSync('.');
-        console.log('Files in current directory:', files);
-      } catch (e) {
-        console.log('Could not list directory');
-      }
-      
       return {
         statusCode: 500,
         headers: { 
@@ -98,9 +83,7 @@ export const handler = async (event) => {
         },
         body: JSON.stringify({ 
           error: 'Template file not found',
-          details: 'Form_11_-_Affidavit_of_Service.docx is not available in the function bundle',
-          searchedPaths: possiblePaths,
-          cwd: process.cwd()
+          details: 'Form_11_-_Affidavit_of_Service_PS.docx is not available'
         })
       };
     }
@@ -178,6 +161,7 @@ function processDocument(xml, data, registryInfo, lawFirmInfo, dateLodged) {
   console.log('Date lodged:', dateLodged);
   console.log('Registry info:', registryInfo);
   console.log('Law firm info:', lawFirmInfo);
+  console.log('CLAIMANT TO BE FILLED:', data.claimant);
   
   let result = xml;
   
@@ -187,15 +171,15 @@ function processDocument(xml, data, registryInfo, lawFirmInfo, dateLodged) {
   // Step 1: Fill in case number
   result = fillTableValue(result, 0, data.caseNumber);
   
-  // Step 2: Fill in claimant (uppercase)
-  result = fillTableValue(result, 1, data.claimant.toUpperCase());
+  // Step 2: Fill in claimant (uppercase) - FORCE REPLACE
+  console.log('ABOUT TO FILL CLAIMANT TABLE WITH:', data.claimant.toUpperCase());
+  result = fillTableValueForceReplace(result, 1, data.claimant.toUpperCase());
   
   // Step 3: Fill ALL defendants in ONE row (PS version)
-  // Format each defendant name and join with commas
   const formattedDefendants = defendants.map(d => formatDefendantName(d)).join(', ');
   result = fillDefendantTablePS(result, 2, 'Defendant', formattedDefendants);
   
-  // Step 4: Fill service statement - use formatted current defendant name, address, and date lodged
+  // Step 4: Fill service statement
   const formattedCurrentDefendant = formatDefendantName(currentDefendant);
   result = fillServiceStatementPS(result, formattedCurrentDefendant, data.defendantAddress, dateLodged);
   
@@ -205,6 +189,44 @@ function processDocument(xml, data, registryInfo, lawFirmInfo, dateLodged) {
   return result;
 }
 
+// NEW FUNCTION: Force replace content in table cell
+function fillTableValueForceReplace(xml, tableIndex, value) {
+  console.log(`fillTableValueForceReplace called with tableIndex=${tableIndex}, value="${value}"`);
+  
+  const tables = xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g);
+  
+  if (!tables || tableIndex >= tables.length) {
+    console.error(`Table ${tableIndex} not found`);
+    return xml;
+  }
+  
+  let table = tables[tableIndex];
+  const cells = table.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
+  
+  if (!cells || cells.length < 2) {
+    console.error(`Table ${tableIndex} doesn't have enough cells`);
+    return xml;
+  }
+  
+  const targetCell = cells[cells.length - 1];  // Get the last cell (should be the value cell)
+  console.log('Target cell found, length:', targetCell.length);
+  
+  // FORCE REPLACE: Clear all paragraphs and create a new one with our value
+  const newCell = targetCell.replace(
+    /(<w:tc>[\s\S]*?<w:tcPr>[\s\S]*?<\/w:tcPr>)([\s\S]*?)(<\/w:tc>)/,
+    (match, cellStart, cellContent, cellEnd) => {
+      // Create a fresh paragraph with the new value
+      const newParagraph = `<w:p><w:r><w:t>${escapeXml(value)}</w:t></w:r></w:p>`;
+      console.log('Replacing cell content with:', newParagraph);
+      return cellStart + newParagraph + cellEnd;
+    }
+  );
+  
+  const newTable = table.replace(targetCell, newCell);
+  return xml.replace(table, newTable);
+}
+
+// Keep the original function for other uses
 function fillTableValue(xml, tableIndex, value) {
   const tables = xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g);
   
@@ -272,80 +294,13 @@ function fillDefendantTable(xml, tableIndex, label, defendantName) {
   return xml.replace(table, newTable);
 }
 
-function addAdditionalDefendants(xml, defendants) {
-  const tables = xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g);
-  
-  if (!tables || tables.length < 3) {
-    return xml;
-  }
-  
-  const firstDefendantTable = tables[2];
-  const ordinals = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth'];
-  
-  // Use smaller spacing to match claimant spacing
-  const spacing = '<w:p w14:paraId="57E6D511" w14:textId="77777777" w:rsidR="009E5709" w:rsidRDefault="009E5709" w:rsidP="007A4244"><w:pPr><w:spacing w:before="60"/><w:rPr><w:sz w:val="4"/></w:rPr></w:pPr></w:p>';
-  
-  let allDefendantTables = [];
-  
-  for (let i = 0; i < defendants.length && i < 6; i++) {
-    let newTable = firstDefendantTable;
-    
-    // Replace any text containing "Defendant" in the first cell
-    newTable = newTable.replace(
-      /<w:t>([^<]*Defendant[^<]*)<\/w:t>/,
-      `<w:t>${ordinals[i]} Defendant</w:t>`
-    );
-    
-    const cells = newTable.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
-    if (cells && cells.length >= 2) {
-      let secondCell = cells[1];
-      secondCell = secondCell.replace(
-        /(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
-        (match, start, content, end) => {
-          return `${start}<w:r><w:t>${escapeXml(defendants[i].toUpperCase())}</w:t></w:r>${end}`;
-        }
-      );
-      newTable = newTable.replace(cells[1], secondCell);
-    }
-    
-    allDefendantTables.push(newTable);
-  }
-  
-  const defendantSection = allDefendantTables.join(spacing);
-  return xml.replace(firstDefendantTable, defendantSection);
-}
-
-function fillServiceStatement(xml, defendantName, defendantOrdinal) {
-  let result = xml;
-  
-  result = result.replace(/\[Name\]/g, escapeXml(defendantName));
-  result = result.replace(/\[Defendant[^\]]*\]/g, `the ${defendantOrdinal} Defendant`);
-  
-  // Keep the brackets with placeholder text for manual entry
-  result = result.replace(/\[Date\]/g, '[Date]');
-  result = result.replace(/\[time[^\]]*\]/g, '[time]');
-  result = result.replace(/\[Place\]/g, '[Place]');
-  result = result.replace(/\[Name of process\]/g, 'General Procedure Claim');
-  
-  return result;
-}
-
 function extractRegistryInfo(gpcText) {
-  // Extract registry information from GPC text
-  // The registry appears in the format:
-  // REGISTRY AT:
-  // Central Law Courts
-  // 501 Hay Street
-  // PERTH WA 6000
-  // Ph: 9425 2222
-  
   const registryInfo = {
     name: '',
     street: '',
     cityStatePostcode: ''
   };
   
-  // Find the REGISTRY AT: section
   const lines = gpcText.split('\n');
   let registryStart = -1;
   
@@ -361,27 +316,21 @@ function extractRegistryInfo(gpcText) {
     return registryInfo;
   }
   
-  // The format from PDF extraction is messy, so we need to extract carefully
-  // Line with REGISTRY AT: might have the name on the same line or next
   let currentLine = lines[registryStart];
   
-  // Check if everything is on same line as REGISTRY AT:
   if (currentLine.includes('REGISTRY AT:')) {
     const afterRegistry = currentLine.substring(currentLine.indexOf('REGISTRY AT:') + 12).trim();
     
-    // Extract street address (number + street name before "Date" or city)
     const streetMatch = afterRegistry.match(/(\d+\s+[A-Za-z\s]+?)(?=\s+Date|\s+[A-Z]{2,}\s+WA)/);
     if (streetMatch) {
       registryInfo.street = streetMatch[1].trim();
     }
     
-    // Extract city/state/postcode
     const cityMatch = afterRegistry.match(/([A-Z\s]+?\s+WA\s+\d{4})/);
     if (cityMatch) {
       registryInfo.cityStatePostcode = cityMatch[1].trim();
     }
     
-    // Extract name - everything before the street number
     let nameOnly = afterRegistry;
     if (registryInfo.street) {
       nameOnly = afterRegistry.substring(0, afterRegistry.indexOf(registryInfo.street)).trim();
@@ -392,12 +341,9 @@ function extractRegistryInfo(gpcText) {
     }
   }
   
-  // Look at next few lines for registry details - these override the single-line extraction
   for (let i = registryStart + 1; i < Math.min(registryStart + 6, lines.length); i++) {
     const line = lines[i].trim();
     
-    // Registry name - must be short (< 100 chars) and look like a court name
-    // ONLY update from line immediately after REGISTRY AT:
     if (i === registryStart + 1 && line && line.length < 100 && 
         !line.includes('Ph:') && !line.match(/^\d/) && !line.includes('Date lodged') &&
         !line.includes('PART') && !line.includes('PLEASE READ')) {
@@ -407,7 +353,6 @@ function extractRegistryInfo(gpcText) {
       }
     }
     
-    // Street address (contains number and street name)
     if (!registryInfo.street && line.match(/^\d+\s+/)) {
       const streetMatch = line.match(/^(\d+\s+[A-Za-z\s]+?)(?=\s+Date|$)/);
       if (streetMatch) {
@@ -415,7 +360,6 @@ function extractRegistryInfo(gpcText) {
       }
     }
     
-    // City/State/Postcode (e.g., "PERTH WA 6000")
     if (!registryInfo.cityStatePostcode && line.match(/[A-Z]{2,}\s+WA\s+\d{4}/)) {
       const cityMatch = line.match(/([A-Z\s]+?\s+WA\s+\d{4})/);
       if (cityMatch) {
@@ -429,7 +373,6 @@ function extractRegistryInfo(gpcText) {
 }
 
 function extractDateLodged(gpcText) {
-  // Extract the date from "Date lodged: DD/MM/YYYY"
   const dateMatch = gpcText.match(/Date lodged:\s*(\d{2}\/\d{2}\/\d{4})/i);
   
   if (dateMatch) {
@@ -443,10 +386,6 @@ function extractDateLodged(gpcText) {
 
 function extractLawFirmInfo(gpcText) {
   console.log('=== STARTING LAW FIRM EXTRACTION ===');
-  console.log('GPC text length:', gpcText.length);
-  console.log('Looking for pattern in text...');
-  console.log('Text contains "Claimant\'s address for service"?', gpcText.includes("Claimant's address for service"));
-  console.log('Text contains "Claimant ref"?', gpcText.includes("Claimant ref"));
   
   const lawFirmInfo = {
     name: '',
@@ -457,7 +396,6 @@ function extractLawFirmInfo(gpcText) {
     lodgedBy: "Claimant's Lawyer"
   };
   
-  // Determine if this is Claimant's or Defendant's lawyer
   const isDefendant = gpcText.includes("Defendant's address") || 
                       gpcText.includes("Defendant details") ||
                       gpcText.toLowerCase().includes("defendant ref:");
@@ -466,19 +404,13 @@ function extractLawFirmInfo(gpcText) {
     lawFirmInfo.lodgedBy = "Defendant's Lawyer";
   }
   
-  // Find "address for service:" in the text (with or without "Claimant's")
   const addressPattern = /address for service:\s+(.+?)(?=\s+Claimant ref:|Description of Claim)/i;
   const addressMatch = gpcText.match(addressPattern);
-  
-  console.log('Address pattern matched?', addressMatch ? 'YES' : 'NO');
   
   if (addressMatch) {
     const fullLine = addressMatch[1].trim();
     console.log('Found address line:', fullLine.substring(0, 100));
     
-    // Extract firm name and address
-    // Pattern: "McCabes Level 16, 44 St Georges Terrace PERTH WA 6000"
-    // Firm name is everything before "Level" or "Suite" or a street number
     const parts = fullLine.match(/^(.+?)\s+(Level|Suite|\d+)\s+(.+)$/i);
     
     if (parts) {
@@ -487,87 +419,31 @@ function extractLawFirmInfo(gpcText) {
       
       console.log('Extracted firm name:', lawFirmInfo.name);
       console.log('Extracted address:', lawFirmInfo.address);
-    } else {
-      console.log('Parts pattern did not match. Full line was:', fullLine);
-    }
-  } else {
-    console.log('Address pattern did not match');
-    const idx = gpcText.indexOf('address for service');
-    if (idx >= 0) {
-      console.log('Sample of text around address:', gpcText.substring(idx, idx + 200));
     }
   }
   
-  // Extract ref
   const refMatch = gpcText.match(/Claimant ref:\s*([^\s]+(?:\s+[^\s]+)*?)(?=\s+Claimant email:|Claimant telephone:|Description of Claim)/i);
   if (refMatch) {
     lawFirmInfo.reference = refMatch[1].trim();
   }
   
-  // Extract email  
   const emailMatch = gpcText.match(/Claimant email:\s*(\S+@\S+)/i);
   if (emailMatch) {
     lawFirmInfo.email = emailMatch[1].trim();
   }
   
-  // Extract telephone - handles all formats: "(08) 9476 3800", "0892213110", "0412 345 678", etc.
-  // First, let's see what's in the text around "telephone"
-  const telIdx = gpcText.toLowerCase().indexOf('claimant telephone:');
-  if (telIdx >= 0) {
-    console.log('Text around telephone field:', gpcText.substring(telIdx, telIdx + 150));
-  } else {
-    console.log('WARNING: Could not find "Claimant telephone:" in text');
-  }
-  
-  // Try multiple patterns to extract phone number
-  let telMatch = null;
-  let rawPhone = null;
-  
-  // Pattern 1: Most specific - stops at mobile, email, or description
-  telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s-]+?)(?=\s+Claimant mobile:|Claimant email:|Description of Claim)/i);
+  let telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s-]+?)(?=\s+Claimant mobile:|Claimant email:|Description of Claim)/i);
   if (telMatch) {
-    rawPhone = telMatch[1].trim();
-    console.log('Pattern 1 matched. Raw phone:', rawPhone);
-  }
-  
-  // Pattern 2: Simpler - just grab digits and formatting chars after "telephone:"
-  if (!rawPhone) {
-    telMatch = gpcText.match(/Claimant telephone:\s*([0-9()\s-]+)/i);
-    if (telMatch) {
-      // Take first 20 characters max to avoid grabbing too much
-      rawPhone = telMatch[1].trim().substring(0, 20).trim();
-      console.log('Pattern 2 matched. Raw phone:', rawPhone);
-    }
-  }
-  
-  // Pattern 3: Most permissive - anything after telephone
-  if (!rawPhone) {
-    telMatch = gpcText.match(/telephone:\s*([^\n\r]+)/i);
-    if (telMatch) {
-      rawPhone = telMatch[1].trim();
-      console.log('Pattern 3 matched. Raw phone:', rawPhone);
-    }
-  }
-  
-  if (rawPhone) {
-    // Format the phone number to standard Australian format
+    const rawPhone = telMatch[1].trim();
     lawFirmInfo.telephone = formatPhoneNumber(rawPhone);
-    console.log('Formatted phone:', lawFirmInfo.telephone);
-  } else {
-    console.log('WARNING: No phone number matched with any pattern!');
   }
   
-  console.log('Extracted law firm - Name:', lawFirmInfo.name);
-  console.log('Extracted law firm - Address:', lawFirmInfo.address);
-  console.log('Extracted law firm - Tel:', lawFirmInfo.telephone);
-  console.log('Extracted law firm - Email:', lawFirmInfo.email);
-  console.log('Extracted law firm - Ref:', lawFirmInfo.reference);
+  console.log('Extracted law firm info:', lawFirmInfo);
   
   return lawFirmInfo;
 }
 
 function fillRegistryInfo(xml, registryInfo) {
-  // Find the first table (header table with registry)
   const tables = xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g);
   
   if (!tables || tables.length === 0) {
@@ -576,9 +452,6 @@ function fillRegistryInfo(xml, registryInfo) {
   }
   
   let headerTable = tables[0];
-  
-  // Find the cell that contains "Registry:" text
-  // This is in the second row, first cell
   const rows = headerTable.match(/<w:tr[\s\S]*?<\/w:tr>/g);
   
   if (!rows || rows.length < 2) {
@@ -586,7 +459,6 @@ function fillRegistryInfo(xml, registryInfo) {
     return xml;
   }
   
-  // The registry information goes in the second row, first cell (after "Registry:")
   let registryRow = rows[1];
   const cells = registryRow.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
   
@@ -597,14 +469,12 @@ function fillRegistryInfo(xml, registryInfo) {
   
   let registryCell = cells[0];
   
-  // Build the registry text with proper formatting (3 lines, Calibri 22pt, NOT bold, NOT underlined)
   const registryLines = [
     registryInfo.name,
     registryInfo.street,
     registryInfo.cityStatePostcode
-  ].filter(line => line); // Remove empty lines
+  ].filter(line => line);
   
-  // Create paragraph XML for each line - without Heading2 style to avoid bold
   const registryParagraphsXml = registryLines.map((line, index) => {
     return `<w:p>
       <w:pPr>
@@ -623,7 +493,6 @@ function fillRegistryInfo(xml, registryInfo) {
     </w:p>`;
   }).join('');
   
-  // Replace the paragraph in the registry cell (keep cell structure, just replace paragraphs)
   registryCell = registryCell.replace(
     /(<w:tc>[\s\S]*?<w:tcPr>[\s\S]*?<\/w:tcPr>)([\s\S]*?)(<\/w:tc>)/,
     (match, cellStart, cellContent, cellEnd) => {
@@ -631,18 +500,13 @@ function fillRegistryInfo(xml, registryInfo) {
     }
   );
   
-  // Replace the cell in the row
   const newRow = registryRow.replace(cells[0], registryCell);
-  
-  // Replace the row in the table
   const newTable = headerTable.replace(rows[1], newRow);
   
-  // Replace the table in the document
   return xml.replace(headerTable, newTable);
 }
 
 function fillLawFirmInfo(xml, lawFirmInfo) {
-  // Find all tables in the document
   const tables = xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g);
   
   if (!tables || tables.length === 0) {
@@ -650,14 +514,7 @@ function fillLawFirmInfo(xml, lawFirmInfo) {
     return xml;
   }
   
-  // The law firm lodgement table is the LAST table in the document
   let lawFirmTable = tables[tables.length - 1];
-  
-  // The table has 3 rows:
-  // Row 0: "Lodged by" | "Claimant's Lawyer" (should span remaining cells)
-  // Row 1: "Address for service" | full address (should span remaining cells)
-  // Row 2: "Contact details" | "Tel:" | phone | "Em:" | email | "Ref:" | reference
-  
   const rows = lawFirmTable.match(/<w:tr[\s\S]*?<\/w:tr>/g);
   
   if (!rows || rows.length < 3) {
@@ -667,13 +524,11 @@ function fillLawFirmInfo(xml, lawFirmInfo) {
   
   console.log('Filling law firm table with:', lawFirmInfo);
   
-  // Row 0: Fill in "Claimant's Lawyer" or "Defendant's Lawyer" in second cell
   let row0 = rows[0];
   const row0Cells = row0.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
   if (row0Cells && row0Cells.length >= 2) {
     let lawyerCell = row0Cells[1];
     
-    // Find the first paragraph and add text
     lawyerCell = lawyerCell.replace(
       /(<w:tc>[\s\S]*?)(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
       (match, cellStart, pStart, pContent, pEnd) => {
@@ -684,17 +539,14 @@ function fillLawFirmInfo(xml, lawFirmInfo) {
     row0 = row0.replace(row0Cells[1], lawyerCell);
   }
   
-  // Row 1: Fill in address in second cell
   let row1 = rows[1];
   const row1Cells = row1.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
   if (row1Cells && row1Cells.length >= 2) {
     let addressCell = row1Cells[1];
     
-    // Build full address string
     const fullAddress = `${lawFirmInfo.name}, ${lawFirmInfo.address}`;
     console.log('Inserting address:', fullAddress);
     
-    // Find the first paragraph and add text
     addressCell = addressCell.replace(
       /(<w:tc>[\s\S]*?)(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
       (match, cellStart, pStart, pContent, pEnd) => {
@@ -705,14 +557,10 @@ function fillLawFirmInfo(xml, lawFirmInfo) {
     row1 = row1.replace(row1Cells[1], addressCell);
   }
   
-  // Row 2: Fill in contact details (Tel in cell 2, Email in cell 4, Ref in cell 6)
   let row2 = rows[2];
   const row2Cells = row2.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
   
   if (row2Cells && row2Cells.length >= 7) {
-    console.log('Filling contact details - Tel:', lawFirmInfo.telephone, 'Email:', lawFirmInfo.email, 'Ref:', lawFirmInfo.reference);
-    
-    // Cell 2 (3rd cell) contains telephone
     let telCell = row2Cells[2];
     telCell = telCell.replace(
       /(<w:tc>[\s\S]*?)(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
@@ -721,7 +569,6 @@ function fillLawFirmInfo(xml, lawFirmInfo) {
       }
     );
     
-    // Cell 4 (5th cell) contains email
     let emailCell = row2Cells[4];
     emailCell = emailCell.replace(
       /(<w:tc>[\s\S]*?)(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
@@ -730,7 +577,6 @@ function fillLawFirmInfo(xml, lawFirmInfo) {
       }
     );
     
-    // Cell 6 (7th cell) contains reference
     let refCell = row2Cells[6];
     refCell = refCell.replace(
       /(<w:tc>[\s\S]*?)(<w:p[^>]*>)([\s\S]*?)(<\/w:p>)/,
@@ -739,19 +585,16 @@ function fillLawFirmInfo(xml, lawFirmInfo) {
       }
     );
     
-    // Replace cells in row
     row2 = row2.replace(row2Cells[2], telCell);
     row2 = row2.replace(row2Cells[4], emailCell);
     row2 = row2.replace(row2Cells[6], refCell);
   }
   
-  // Replace rows in table
   let newTable = lawFirmTable;
   newTable = newTable.replace(rows[0], row0);
   newTable = newTable.replace(rows[1], row1);
   newTable = newTable.replace(rows[2], row2);
   
-  // Replace table in document
   return xml.replace(lawFirmTable, newTable);
 }
 
@@ -766,19 +609,15 @@ function escapeXml(text) {
 }
 
 function formatDefendantName(name) {
-  // Format: "FirstName LASTNAME" (first name in title case, last name in UPPER CASE)
-  // Assumes the last word is the surname
   if (!name) return '';
   
   const parts = name.trim().split(/\s+/);
   if (parts.length === 0) return '';
   
   if (parts.length === 1) {
-    // Only one name - assume it's surname, make it uppercase
     return parts[0].toUpperCase();
   }
   
-  // Last part is surname (uppercase), everything else is given names (title case)
   const surname = parts[parts.length - 1].toUpperCase();
   const givenNames = parts.slice(0, -1).map(part => {
     return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
@@ -788,13 +627,8 @@ function formatDefendantName(name) {
 }
 
 function formatAddress(address) {
-  // Format address: add comma after street type, convert suburb to title case
-  // Example: "330 Maine-Anjou Drive LOWER CHITTERING WA 6084" 
-  //       -> "330 Maine-Anjou Drive, Lower Chittering WA 6084"
-  
   if (!address) return '';
   
-  // Common Australian street types
   const streetTypes = [
     'Street', 'St', 'Road', 'Rd', 'Drive', 'Dr', 'Avenue', 'Ave', 
     'Court', 'Ct', 'Place', 'Pl', 'Crescent', 'Cres', 'Lane', 'La',
@@ -803,21 +637,14 @@ function formatAddress(address) {
     'Grove', 'Gr', 'Rise', 'Mews', 'Walk', 'Gardens', 'Gdns'
   ];
   
-  // Create a regex pattern that matches any street type (case insensitive)
   const streetTypePattern = streetTypes.join('|');
   const regex = new RegExp(`\\b(${streetTypePattern})\\b(?!,)`, 'i');
   
   let formatted = address;
-  
-  // Add comma after street type if not already present
   formatted = formatted.replace(regex, '$1,');
   
-  // Now convert suburb/town to title case
-  // The suburb is typically after the street type and before the state (WA, NSW, etc.)
-  // Pattern: "Drive, LOWER CHITTERING WA" -> "Drive, Lower Chittering WA"
   formatted = formatted.replace(/,\s+([A-Z\s]+)\s+(WA|NSW|VIC|QLD|SA|TAS|NT|ACT)\s+(\d{4})/g, 
     (match, suburb, state, postcode) => {
-      // Convert suburb to title case
       const titleCaseSuburb = suburb.toLowerCase().split(' ').map(word => {
         return word.charAt(0).toUpperCase() + word.slice(1);
       }).join(' ');
@@ -830,38 +657,28 @@ function formatAddress(address) {
 }
 
 function formatPhoneNumber(phone) {
-  // Format Australian phone numbers to (XX) XXXX XXXX format
-  // Handles: "0892213110", "(08) 9221 3110", "08 9221 3110", etc.
-  
   if (!phone) return '';
   
-  // Remove all non-digit characters
   const digitsOnly = phone.replace(/\D/g, '');
   
-  // Check if it's a 10-digit Australian number starting with 0
   if (digitsOnly.length === 10 && digitsOnly.startsWith('0')) {
-    // Format as (0X) XXXX XXXX
     const areaCode = digitsOnly.substring(0, 2);
     const firstPart = digitsOnly.substring(2, 6);
     const secondPart = digitsOnly.substring(6, 10);
     return `(${areaCode}) ${firstPart} ${secondPart}`;
   }
   
-  // Check if it's a mobile number (starting with 04, 10 digits)
   if (digitsOnly.length === 10 && digitsOnly.startsWith('04')) {
-    // Format as 04XX XXX XXX
     const prefix = digitsOnly.substring(0, 4);
     const firstPart = digitsOnly.substring(4, 7);
     const secondPart = digitsOnly.substring(7, 10);
     return `${prefix} ${firstPart} ${secondPart}`;
   }
   
-  // If format doesn't match, return as-is (already formatted or unusual format)
   return phone;
 }
 
 function fillDefendantTablePS(xml, tableIndex, label, allDefendants) {
-  // PS version: Fill ONE defendant table with ALL defendants (comma-separated)
   const tables = xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g);
   
   if (!tables || tableIndex >= tables.length) {
@@ -875,47 +692,35 @@ function fillDefendantTablePS(xml, tableIndex, label, allDefendants) {
     return xml;
   }
   
-  // First cell gets the label - preserve existing formatting
   let labelCell = cells[0];
   labelCell = labelCell.replace(
     /<w:t>.*?<\/w:t>/,
     `<w:t>${escapeXml(label)}</w:t>`
   );
   
-  // Second cell gets all defendants - preserve existing formatting (which includes bold)
   let valueCell = cells[1];
-  // Look for existing <w:t> tags and replace their content
   valueCell = valueCell.replace(
     /<w:t>.*?<\/w:t>/,
     `<w:t>${escapeXml(allDefendants)}</w:t>`
   );
   
-  // Replace cells in table
   const newTable = table.replace(cells[0], labelCell).replace(cells[1], valueCell);
   return xml.replace(table, newTable);
 }
 
 function fillServiceStatementPS(xml, formattedDefendantName, defendantAddress, dateLodged) {
-  // Replace "the First Defendant" or ordinal references with actual defendant name
-  // Also replace the placeholder "Joe BLOGGS" with the actual defendant name
-  // Replace [Place] with the defendant's address (formatted)
-  // Replace [date] with the date lodged
-  
   let result = xml;
   
-  // Replace ordinal references like "the First Defendant"
   result = result.replace(
     /the\s+(First|Second|Third|Fourth|Fifth|Sixth)\s+Defendant/g,
     `${formattedDefendantName}`
   );
   
-  // Replace the placeholder "Joe BLOGGS" with actual defendant name
   result = result.replace(
     /Joe BLOGGS/g,
     formattedDefendantName
   );
   
-  // Replace [Place] with the defendant's address (formatted with comma and title case suburb)
   if (defendantAddress) {
     const formattedAddress = formatAddress(defendantAddress);
     result = result.replace(
@@ -924,7 +729,6 @@ function fillServiceStatementPS(xml, formattedDefendantName, defendantAddress, d
     );
   }
   
-  // Replace [date] with the date lodged (appears in "lodged on [date]:")
   if (dateLodged) {
     result = result.replace(
       /\[date\]/g,
