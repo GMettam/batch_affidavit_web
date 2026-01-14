@@ -189,7 +189,7 @@ function processDocument(xml, data, registryInfo, lawFirmInfo, dateLodged) {
   return result;
 }
 
-// NEW FUNCTION: Force replace content in table cell
+// NEW FUNCTION: Force replace content in table cell with bold and vertical centering
 function fillTableValueForceReplace(xml, tableIndex, value) {
   console.log(`fillTableValueForceReplace called with tableIndex=${tableIndex}, value="${value}"`);
   
@@ -212,17 +212,41 @@ function fillTableValueForceReplace(xml, tableIndex, value) {
   console.log('Target cell found, length:', targetCell.length);
   
   // FORCE REPLACE: Clear all paragraphs and create a new one with our value
+  // Add bold formatting and vertical centering (left-aligned like defendant cell)
   const newCell = targetCell.replace(
     /(<w:tc>[\s\S]*?<w:tcPr>[\s\S]*?<\/w:tcPr>)([\s\S]*?)(<\/w:tc>)/,
     (match, cellStart, cellContent, cellEnd) => {
-      // Create a fresh paragraph with the new value
-      const newParagraph = `<w:p><w:r><w:t>${escapeXml(value)}</w:t></w:r></w:p>`;
-      console.log('Replacing cell content with:', newParagraph);
+      // Create a fresh paragraph with bold text, left-aligned
+      const newParagraph = `<w:p>
+        <w:r>
+          <w:rPr>
+            <w:b/>
+          </w:rPr>
+          <w:t>${escapeXml(value)}</w:t>
+        </w:r>
+      </w:p>`;
+      console.log('Replacing cell content with bold and vertically centered text (left-aligned)');
       return cellStart + newParagraph + cellEnd;
     }
   );
   
-  const newTable = table.replace(targetCell, newCell);
+  // Add vertical centering to the cell properties
+  const newCellWithVAlign = newCell.replace(
+    /(<w:tcPr>)([\s\S]*?)(<\/w:tcPr>)/,
+    (match, start, content, end) => {
+      // Check if vAlign already exists
+      if (content.includes('<w:vAlign')) {
+        // Replace existing vAlign
+        const updated = content.replace(/<w:vAlign[^>]*\/?>/, '<w:vAlign w:val="center"/>');
+        return start + updated + end;
+      } else {
+        // Add vAlign
+        return start + content + '<w:vAlign w:val="center"/>' + end;
+      }
+    }
+  );
+  
+  const newTable = table.replace(targetCell, newCellWithVAlign);
   return xml.replace(table, newTable);
 }
 
