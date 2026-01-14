@@ -28,10 +28,24 @@ export const handler = async (event) => {
     const prompt = `You are extracting information from a Western Australian Magistrates Court GPC (General Procedure Claim) Form 3 document.
 
 CRITICAL INSTRUCTIONS FOR CLAIMANT NAME:
-- The claimant's name appears in a table under the "Claimant" row, in a field labeled "Legal Name:"
-- Extract ONLY the person's actual name from the "Legal Name:" field
-- DO NOT extract law firm names, addresses, or "C/-" (care of) information
-- The claimant is a PERSON, not a law firm or company
+The document has a table structure with these sections:
+1. REGISTRY AT: (contains court address - IGNORE THIS)
+2. Claimant section with "Legal Name:" field
+3. Defendant section(s) with "Legal Name:" field
+4. "Signature of Claimant or Lawyer:" field (may contain law firm names - IGNORE THIS)
+5. "Claimant's address for service:" (contains law firm address - IGNORE THIS)
+
+YOU MUST extract the claimant name from the FIRST "Legal Name:" field that appears AFTER the word "Claimant" and BEFORE any "Defendant" section.
+
+LOOK FOR THIS EXACT PATTERN in the text:
+"Claimant" ... "Legal Name:" ... [THE CLAIMANT NAME IS HERE]
+
+DO NOT extract from:
+- "Signature of Claimant or Lawyer:" (this might say "McCabes", "ROY GALVIN & CO", etc.)
+- "Claimant's address for service:" (this contains law firm info)
+- Any text in the REGISTRY AT section
+
+The claimant can be a PERSON (e.g., "Geoffrey OGDEN") OR an ORGANIZATION (e.g., "IMMACULATE HEART COLLEGE").
 
 IMPORTANT: This GPC may have MULTIPLE defendants. You must extract information for ALL defendants listed.
 
@@ -39,11 +53,11 @@ Extract the following information and return ONLY a valid JSON object with no ad
 
 {
   "caseNumber": "the GCLM case number (e.g., GCLM/2763/2024)",
-  "claimant": "the claimant's full name from the 'Legal Name:' field ONLY (e.g., 'Geoffrey OGDEN', NOT law firm names)",
+  "claimant": "the name from the FIRST 'Legal Name:' field after 'Claimant' (person OR organization name)",
   "defendants": [
     {
-      "name": "First defendant's full name",
-      "address": "First defendant's full address"
+      "name": "First defendant's full name from 'Legal Name:' field",
+      "address": "First defendant's full address from 'Address:' field"
     },
     {
       "name": "Second defendant's full name (if exists)",
@@ -53,20 +67,31 @@ Extract the following information and return ONLY a valid JSON object with no ad
   ]
 }
 
-EXAMPLE OF CORRECT EXTRACTION:
+EXAMPLES OF CORRECT EXTRACTION:
+
+Example 1 - Individual claimant:
 If the document shows:
 Claimant | Legal Name: Geoffrey OGDEN
          | Address: C/- McCabes Level 16, 44 St Georges Terrace PERTH WA 6000
-
 Then extract: "claimant": "Geoffrey OGDEN"
-DO NOT extract: "claimant": "McCabes" or "ROY GALVIN & CO"
+
+Example 2 - Organization claimant:
+If the document shows:
+Claimant | Legal Name: IMMACULATE HEART COLLEGE
+         | Address: 34 Santa Gertrudis Drive LOWER CHITTERING WA 6084
+Then extract: "claimant": "IMMACULATE HEART COLLEGE"
+
+DO NOT extract:
+- "claimant": "McCabes" (this is from signature or address for service)
+- "claimant": "ROY GALVIN & CO" (this is from signature or address for service)
 
 GPC Document Text:
 ${text}
 
 Remember: 
 - Return ONLY the JSON object, nothing else
-- The claimant is the PERSON's name from "Legal Name:" field
+- Extract claimant from the FIRST "Legal Name:" after "Claimant" section
+- Ignore any law firm names in signature or address for service fields
 - Include ALL defendants in the "defendants" array
 - Each defendant should have "name" and "address" fields
 - If there's only one defendant, the array will have one object
